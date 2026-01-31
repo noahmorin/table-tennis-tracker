@@ -1,12 +1,12 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from 'vue';
 import { useRouter } from 'vue-router';
-import { Settings } from 'lucide-vue-next';
+import { Settings, LogOut } from 'lucide-vue-next';
 import BottomNav from './components/BottomNav.vue';
 import { appConfig } from './config/appConfig';
 import { useAuth } from './stores/auth';
 
-const { appName, leagueLabel, statusLabel } = appConfig;
+const { appName, leagueLabel } = appConfig;
 const { isAuthenticated, profile, user, signOut } = useAuth();
 const router = useRouter();
 
@@ -23,7 +23,7 @@ const dialogRef = ref<HTMLDialogElement | null>(null);
 const isDark = computed(() => theme.value === 'dark');
 const activeThemeLabel = computed(() => (isDark.value ? 'Dark' : 'Light'));
 const showBottomNav = computed(() => isAuthenticated.value);
-const profileLabel = computed(() => profile.value?.display_name ?? user.value?.email ?? '');
+const profileLabel = computed(() => profile.value?.username ?? user.value?.email ?? '');
 
 const themeColors: Array<{ id: ThemeColor; label: string; swatch: string }> = [
   { id: 'red', label: 'Red', swatch: '#c0392b' },
@@ -92,6 +92,7 @@ const setThemeColor = (value: ThemeColor) => {
 
 const handleSignOut = async () => {
   await signOut();
+  closeThemeDialog();
   router.replace('/login');
 };
 
@@ -108,14 +109,10 @@ onMounted(() => {
         <h1>{{ appName }}</h1>
       </div>
       <div class="header-actions">
-        <div v-if="isAuthenticated" class="user-pill">{{ profileLabel }}</div>
-        <button v-if="isAuthenticated" class="ghost-btn" type="button" @click="handleSignOut">
-          Sign Out
-        </button>
+        <div v-if="isAuthenticated" class="user-pill">@{{ profileLabel }}</div>
         <button class="gear-button" type="button" aria-label="Theme settings" @click="openThemeDialog">
           <Settings aria-hidden="true" class="gear-icon" />
         </button>
-        <div class="status-pill">{{ statusLabel }}</div>
       </div>
     </header>
 
@@ -171,12 +168,19 @@ onMounted(() => {
             class="theme-color-option"
             :class="{ 'is-active': themeColor === option.id }"
             :style="{ '--swatch': option.swatch }"
+            :aria-label="option.label"
+            :title="option.label"
             @click="setThemeColor(option.id)"
-          >
-            <span class="theme-color-swatch" aria-hidden="true"></span>
-            <span class="theme-color-label">{{ option.label }}</span>
-          </button>
+          ></button>
         </div>
+      </div>
+
+      <div v-if="isAuthenticated" class="theme-dialog__section theme-dialog__actions">
+        <h3 class="theme-dialog__section-title">Account</h3>
+        <button class="ghost-btn ghost-btn--danger" type="button" @click="handleSignOut">
+          <LogOut class="ghost-btn__icon" aria-hidden="true" />
+          Sign Out
+        </button>
       </div>
     </form>
   </dialog>
