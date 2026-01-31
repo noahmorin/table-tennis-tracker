@@ -10,6 +10,6 @@ export const appConfig = {
     'A lightweight, mobile-first PWA for tracking office table tennis matches.',
   leagueLabel: readEnv('VITE_APP_LEAGUE_LABEL', 'Office League'),
   statusLabel: readEnv('VITE_APP_STATUS_LABEL', 'Ranked'),
-  themeColor: '#11324d',
-  backgroundColor: '#f5f0e6'
+  themeColor: '#1f5f45',
+  backgroundColor: '#eef4ec'
 };

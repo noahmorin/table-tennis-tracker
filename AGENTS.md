@@ -8,15 +8,15 @@ Use it as the default reference for code, schema, and UI decisions.
 ---
 
 ## 1. Purpose (one sentence)
-A lightweight, mobile-first PWA for tracking competitive table tennis matches inside one office, optimized for simplicity, correctness, auditability, and free-tier hosting.
+A lightweight, mobile-first web app for tracking competitive table tennis matches inside one office, optimized for simplicity, correctness, auditability, and free-tier hosting.
 
 ---
 
 ## 2. Goals
 - Track ranked matches among trusted office users (approx 8-25 players)
-- Display: leaderboard, player profiles, match history, Elo ratings (client-side)
+- Display: leaderboard, player profiles, Elo ratings (client-side)
 - Low-friction match submission and correction
-- Complete, auditable match history (no hard deletes)
+- Complete, auditable match records (no hard deletes)
 - No custom backend servers; frontend talks directly to Supabase
 - Operate entirely on free tiers (GitHub Pages + Supabase free tier)
 
@@ -32,7 +32,7 @@ A lightweight, mobile-first PWA for tracking competitive table tennis matches in
 
 ## 4. Tech stack
 Frontend:
-- Vue 3, TypeScript, Vite, vite-plugin-pwa
+- Vue 3, TypeScript, Vite
 - Mobile-first layout
 - Hosted on GitHub Pages
 
@@ -58,7 +58,7 @@ Implication: prioritize clarity and auditability over adversarial security.
 Fundamental rule:
 - A match is a single record shared by both players.
 - Games belong to that match.
-- All stats and Elo are derived from match history.
+- All stats and Elo are derived from match records.
 
 Source of truth:
 - Raw game scores (`games`) are authoritative.
@@ -123,7 +123,6 @@ Avoid duplicating surfaces or turning stats pages into leaderboards.
 - `/submit-match`
 - `/leaderboard`
 - `/players/:id` (player profile + inspect stats)
-- `/match-history`
 - `/my-matches`
 
 UI expectation: mobile-first with bottom tab navigation.

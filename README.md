@@ -1,6 +1,6 @@
 # Table Tennis Tracker
 
-A lightweight, mobile-first Progressive Web App for tracking ranked table tennis matches within a single office environment.
+A lightweight, mobile-first web app for tracking ranked table tennis matches within a single office environment.
 
 The app focuses on **simplicity, correctness, transparency, and zero-cost hosting**, while remaining flexible enough to support Elo ratings, detailed statistics, and future tournament modes.
 
@@ -11,7 +11,7 @@ The app focuses on **simplicity, correctness, transparency, and zero-cost hostin
 Table Tennis Tracker is designed to:
 
 - Record completed, ranked table tennis matches
-- Maintain a complete and auditable match history
+- Maintain a complete and auditable match record log
 - Compute Elo ratings and player statistics deterministically
 - Provide clear leaderboards and player profiles
 - Support low-friction match submission and correction
@@ -26,7 +26,7 @@ The app is intended for **trusted users** in a small, internal league (e.g. an o
 - Game-level score recording
 - Client-side Elo computation
 - Leaderboards with filtering
-- Player profiles and match history
+- Player profiles and match records
 - Detailed personal statistics dashboard
 - View-only inspection of other players’ stats
 - Soft-delete and audit logging for corrections
@@ -39,8 +39,7 @@ The app is intended for **trusted users** in a small, internal league (e.g. an o
 - Vue 3
 - TypeScript
 - Vite
-- `vite-plugin-pwa`
-- Mobile-first PWA
+- Mobile-first web app
 - Hosted on GitHub Pages
 
 ### Backend / Data
@@ -55,7 +54,7 @@ The app is intended for **trusted users** in a small, internal league (e.g. an o
 ## Design Principles
 
 - Matches are the source of truth
-- All stats and Elo are derived from match history
+- All stats and Elo are derived from match records
 - No pre-aggregated statistics or stored ratings
 - Prefer recomputation over storage
 - Prefer correction over deletion

@@ -210,7 +210,7 @@ body {
   left: 0;
   right: 0;
   display: grid;
-  grid-template-columns: repeat(4, 1fr);
+  grid-template-columns: repeat(3, 1fr);
   background: var(--surface-white);
   border-top: 1px solid var(--border-subtle);
   padding: 10px 14px 18px;
