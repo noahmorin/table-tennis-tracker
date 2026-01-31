@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from 'vue';
+import { Settings } from 'lucide-vue-next';
 import BottomNav from './components/BottomNav.vue';
 import { appConfig } from './config/appConfig';
 
@@ -97,12 +98,7 @@ onMounted(() => {
       </div>
       <div class="header-actions">
         <button class="gear-button" type="button" aria-label="Theme settings" @click="openThemeDialog">
-          <svg viewBox="0 0 24 24" aria-hidden="true" class="gear-icon">
-            <path
-              fill="currentColor"
-              d="M12 8.9a3.1 3.1 0 1 0 0 6.2 3.1 3.1 0 0 0 0-6.2zm9 3.1-.9-.5.1-1.1-1.7-2.9-1.1.1-.5-.9-3.3-.9-.7.8-1.1-.2-2.9 1.7.1 1.1-.9.5-.9 3.3.8.7-.2 1.1 1.7 2.9 1.1-.1.5.9 3.3.9.7-.8 1.1.2 2.9-1.7-.1-1.1.9-.5.9-3.3-.8-.7.2-1.1-1.7-2.9-1.1.1-.5-.9-3.3-.9-.7.8-1.1-.2-2.9 1.7.1 1.1z"
-            />
-          </svg>
+          <Settings aria-hidden="true" class="gear-icon" />
         </button>
         <div class="status-pill">{{ statusLabel }}</div>
       </div>
