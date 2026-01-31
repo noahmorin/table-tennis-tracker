@@ -1,10 +1,14 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from 'vue';
+import { useRouter } from 'vue-router';
 import { Settings } from 'lucide-vue-next';
 import BottomNav from './components/BottomNav.vue';
 import { appConfig } from './config/appConfig';
+import { useAuth } from './stores/auth';
 
 const { appName, leagueLabel, statusLabel } = appConfig;
+const { isAuthenticated, profile, user, signOut } = useAuth();
+const router = useRouter();
 
 type ThemeMode = 'light' | 'dark';
 type ThemeColor = 'red' | 'blue' | 'green' | 'purple' | 'pink' | 'yellow' | 'orange';
@@ -18,6 +22,8 @@ const dialogRef = ref<HTMLDialogElement | null>(null);
 
 const isDark = computed(() => theme.value === 'dark');
 const activeThemeLabel = computed(() => (isDark.value ? 'Dark' : 'Light'));
+const showBottomNav = computed(() => isAuthenticated.value);
+const profileLabel = computed(() => profile.value?.display_name ?? user.value?.email ?? '');
 
 const themeColors: Array<{ id: ThemeColor; label: string; swatch: string }> = [
   { id: 'red', label: 'Red', swatch: '#c0392b' },
@@ -84,19 +90,28 @@ const setThemeColor = (value: ThemeColor) => {
   applyThemeColor(value);
 };
 
+const handleSignOut = async () => {
+  await signOut();
+  router.replace('/login');
+};
+
 onMounted(() => {
   syncFromStorageOrSystem();
 });
 </script>
 
 <template>
-  <div class="app-shell">
+  <div class="app-shell" :class="{ 'app-shell--guest': !showBottomNav }">
     <header class="app-header">
       <div>
         <p class="eyebrow">{{ leagueLabel }}</p>
         <h1>{{ appName }}</h1>
       </div>
       <div class="header-actions">
+        <div v-if="isAuthenticated" class="user-pill">{{ profileLabel }}</div>
+        <button v-if="isAuthenticated" class="ghost-btn" type="button" @click="handleSignOut">
+          Sign Out
+        </button>
         <button class="gear-button" type="button" aria-label="Theme settings" @click="openThemeDialog">
           <Settings aria-hidden="true" class="gear-icon" />
         </button>
@@ -112,7 +127,7 @@ onMounted(() => {
       </router-view>
     </main>
 
-    <BottomNav />
+    <BottomNav v-if="showBottomNav" />
   </div>
 
   <dialog ref="dialogRef" class="theme-dialog">

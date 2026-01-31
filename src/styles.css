@@ -30,6 +30,10 @@ body {
   padding-bottom: var(--space-nav);
 }
 
+.app-shell--guest {
+  padding-bottom: var(--space-3xl);
+}
+
 .app-header {
   display: flex;
   align-items: center;
@@ -42,6 +46,8 @@ body {
   display: flex;
   align-items: center;
   gap: var(--space-sm);
+  flex-wrap: wrap;
+  justify-content: flex-end;
 }
 
 .app-header h1 {
@@ -66,6 +72,37 @@ body {
   font-weight: 600;
   text-transform: uppercase;
   letter-spacing: 0.12em;
+}
+
+.user-pill {
+  background: var(--brand-tint-12);
+  border-radius: var(--radius-pill);
+  padding: var(--space-2xs) var(--space-sm);
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--brand-primary);
+  max-width: 180px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.ghost-btn {
+  border: 1px solid var(--brand-tint-12);
+  border-radius: var(--radius-pill);
+  padding: var(--space-2xs) var(--space-sm);
+  background: transparent;
+  color: var(--text-primary);
+  font-size: 12px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  cursor: pointer;
+}
+
+.ghost-btn:hover {
+  border-color: var(--brand-primary);
+  color: var(--brand-primary);
 }
 
 .gear-button {
@@ -155,11 +192,50 @@ body {
   box-shadow: var(--shadow-card);
 }
 
+.auth-toggle {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: var(--space-xs);
+  background: var(--surface-input);
+  border-radius: var(--radius-pill);
+  padding: 4px;
+  border: 1px solid var(--border-subtle);
+}
+
+.auth-toggle__btn {
+  border: none;
+  border-radius: var(--radius-pill);
+  padding: var(--space-xs) var(--space-sm);
+  background: transparent;
+  color: var(--text-muted);
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.auth-toggle__btn.is-active {
+  background: var(--surface-card);
+  color: var(--text-primary);
+  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.08);
+}
+
 .field {
   display: grid;
   gap: var(--space-xs);
   font-size: 14px;
   color: var(--text-muted);
+}
+
+.field-hint {
+  font-size: 12px;
+  color: var(--text-muted);
+}
+
+.field-hint.is-error {
+  color: #b7382d;
+}
+
+.field-hint.is-success {
+  color: #1f7a4d;
 }
 
 .field input,
@@ -190,6 +266,28 @@ body {
   letter-spacing: 0.08em;
   text-transform: uppercase;
   cursor: pointer;
+}
+
+.form-note {
+  font-size: 13px;
+  color: var(--text-muted);
+}
+
+.form-message {
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.form-message.is-error {
+  color: #b7382d;
+}
+
+.form-message.is-success {
+  color: #1f7a4d;
+}
+
+.form-message.is-warning {
+  color: #a36800;
 }
 
 .timeline {
