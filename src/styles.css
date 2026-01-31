@@ -12,9 +12,9 @@ body {
   color: var(--text-primary);
   background: radial-gradient(
     circle at top,
-    var(--surface-white) 0%,
-    var(--surface-app) 48%,
-    var(--surface-app-accent) 100%
+    var(--app-gradient-inner) 0%,
+    var(--app-gradient-mid) 48%,
+    var(--app-gradient-outer) 100%
   );
   min-height: 100vh;
 }
