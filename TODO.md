@@ -22,6 +22,13 @@
 - [ ] Decide on `/match-history` route vs `/my-matches`, update router/nav/docs.
 - [ ] Add loading/empty/error states for data pages.
 
+## Admin mode
+- [ ] Add admin-only toggle in settings modal (hidden for non-admins).
+- [ ] Show a persistent admin-mode banner/indicator when enabled.
+- [ ] Allow admins to create matches for any players (select player 1 + player 2).
+- [ ] Allow admins to edit/void any match.
+- [ ] Add "include inactive" filter where match lists are shown.
+
 ## Deploy
 - [ ] Document GitHub Pages build/deploy steps and base path expectations.
 

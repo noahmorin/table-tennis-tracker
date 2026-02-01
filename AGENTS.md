@@ -129,6 +129,16 @@ UI expectation: mobile-first with bottom tab navigation.
 
 ---
 
+## 9.1 Admin mode (overlay)
+- Admin mode toggle lives in the settings modal and is only visible to admins (`profiles.is_admin = true`).
+- When enabled, show a persistent admin-mode indicator.
+- Admin mode overlays existing pages; no separate admin routes.
+- Admins can create, edit, and void matches for any players.
+- Inactive matches/games are hidden by default; admin views can include an optional "include inactive" filter.
+- Audit log remains database-only (no frontend surface).
+
+---
+
 ## 10. Match submission, edit, void
 Submission inputs:
 - Opponent
@@ -138,6 +148,8 @@ Submission inputs:
 - Optional Game 3 score (or more depending on match_format)
 - Optional notes
 - Match format (default `bo3`)
+- Standard users can only create matches that include themselves (select opponent).
+- Admins can create matches for any two players (select player 1 + player 2).
 
 Client-side validation:
 - Minimum winning score: 11
@@ -148,6 +160,7 @@ Client-side validation:
 
 Editing rules:
 - Either participant may edit a match
+- Admins may edit any match
 - Match ID remains constant
 - Derived cached fields recomputed
 - Audit log captures before/after
@@ -156,6 +169,7 @@ Voiding rules:
 - Set `is_active = false`
 - No hard deletes
 - Excluded from stats/Elo by default
+- Admins may void any match
 
 ---
 
@@ -327,6 +341,8 @@ Behavior:
   - `service_role`
 
 Note: Broad grants mean RLS/policies are the real gate. Treat "write paths" as part of app correctness rather than security.
+Apply `supabase/rls-rpc-only.sql` to enforce RPC-only writes on `matches` and `games`.
+`profile_link_auth` is not used; remove it with `supabase/remove-profile-link-auth.sql`.
 
 ---
 

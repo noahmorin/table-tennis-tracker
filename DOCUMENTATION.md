@@ -318,6 +318,8 @@ audit_log (
 ### Submission Flow
 
 - Player submits match after completion
+- Standard users can only create matches that include themselves (they select the opponent).
+- Admins can create matches for any two players (select player 1 and player 2).
 - Required inputs:
     - Opponent
     - Match date (date only)
@@ -338,6 +340,7 @@ audit_log (
 ### Editing Rules
 
 - Either participant may edit a match
+- Admins may edit any match
 - Match ID remains constant
 - Derived fields are recomputed
 - Audit log records before/after
@@ -345,6 +348,7 @@ audit_log (
 ### Voiding
 
 - Sets `is_active = false`
+- Admins may void any match
 - No hard deletes
 - Excluded from stats/Elo by default
 
@@ -579,6 +583,17 @@ Mobile-first navigation (bottom tabs).
 
 ---
 
+## 11.1 Admin Mode (Overlay)
+
+- Admin mode is a toggle in the settings modal and is only visible to admins (`profiles.is_admin = true`).
+- When enabled, show a persistent admin-mode indicator.
+- Admin mode overlays existing pages; no separate admin routes.
+- Admins can create matches for any two players (select player 1 + player 2), edit any match, and void any match.
+- Inactive matches/games are hidden by default; admin views can include an optional "include inactive" filter.
+- The audit log remains database-only (no frontend surface).
+
+---
+
 ## 12. Design Philosophy (Non-Negotiable)
 
 - Store rich raw data
@@ -707,6 +722,15 @@ for each row execute function public.handle_new_user_profile();
 
 - `public.username_available(text) -> boolean` is used by the signup form to avoid duplicate usernames.
 - SQL lives in `supabase/username-available.sql`.
+
+### Auth helper functions
+
+- `public.current_profile_id()` and `public.is_admin()` are required by RLS policies and RPCs.
+- SQL lives in `supabase/auth-helpers.sql`.
+
+### Legacy cleanup
+
+- `profile_link_auth` is not used. If it exists in the database, remove it with `supabase/remove-profile-link-auth.sql`.
 
 ### RLS policy intent (minimum)
 

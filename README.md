@@ -30,6 +30,7 @@ The app is intended for **trusted users** in a small, internal league (e.g. an o
 - Detailed personal statistics dashboard
 - View-only inspection of other players’ stats
 - Soft-delete and audit logging for corrections
+- Admin mode (toggle) for league-wide edits and voids
 
 ---
 
