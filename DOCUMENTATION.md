@@ -318,10 +318,11 @@ audit_log (
 ### Submission Flow
 
 - Player submits match after completion
-- Standard users can only create matches that include themselves (they select the opponent).
+- Standard users can only create matches that include themselves (player 1 is locked to their profile and they select player 2).
 - Admins can create matches for any two players (select player 1 and player 2).
 - Required inputs:
-    - Opponent
+    - Player 1
+    - Player 2
     - Match date (date only)
     - Game 1 score
     - Game 2 score

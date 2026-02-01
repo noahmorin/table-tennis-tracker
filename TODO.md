@@ -1,9 +1,9 @@
 # TODO
 
 ## Match submission / edit / void
-- [ ] Build submit match form (opponent, date, scores, format, notes).
-- [ ] Enforce client validation (min 11, win by 2, best-of rules).
-- [ ] Implement match creation via `match_create` (games JSON + notes).
+- [x] Build submit match form (player 1/2, date, scores, format, notes).
+- [x] Enforce client validation (min 11, win by 2, best-of rules).
+- [x] Implement match creation via `match_create` (games JSON + notes).
 - [ ] Implement match editing via `match_update`.
 - [ ] Implement match voiding via `match_void`.
 - [ ] Ensure all mutations write to `audit_log`.

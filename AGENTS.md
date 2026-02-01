@@ -140,14 +140,15 @@ UI expectation: mobile-first with bottom tab navigation.
 
 ## 10. Match submission, edit, void
 Submission inputs:
-- Opponent
+- Player 1
+- Player 2
 - Match date (date only)
 - Game 1 score
 - Game 2 score
 - Optional Game 3 score (or more depending on match_format)
 - Optional notes
 - Match format (default `bo3`)
-- Standard users can only create matches that include themselves (select opponent).
+- Standard users can only create matches that include themselves (player 1 is locked to their profile and they select player 2).
 - Admins can create matches for any two players (select player 1 + player 2).
 
 Client-side validation:

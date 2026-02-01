@@ -10,7 +10,18 @@
   --surface-white: #ffffff;
   --surface-card: #ffffff;
   --border-subtle: #c8d6cf;
-  --surface-input: #f6fbf7;
+  --surface-input: var(--surface-card);
+  --status-danger: #b7382d;
+  --status-danger-strong: #9e2f26;
+  --status-danger-border: rgba(183, 56, 45, 0.3);
+  --status-danger-border-strong: rgba(183, 56, 45, 0.6);
+  --status-success: #1f7a4d;
+  --status-warning: #a36800;
+  --overlay-backdrop: rgba(0, 0, 0, 0.45);
+  --shadow-header: 0 12px 24px rgba(8, 18, 26, 0.04);
+  --shadow-float: 0 6px 18px rgba(0, 0, 0, 0.08);
+  --shadow-chip: 0 6px 14px rgba(0, 0, 0, 0.08);
+  --select-arrow-color: var(--text-muted);
   --app-gradient-inner: var(--surface-white);
   --app-gradient-mid: var(--surface-app);
   --app-gradient-outer: var(--surface-app-accent);
@@ -56,7 +67,11 @@
     --surface-white: #111614;
     --surface-card: #141b18;
     --border-subtle: #27332c;
-    --surface-input: #101714;
+    --surface-input: var(--surface-card);
+    --overlay-backdrop: rgba(0, 0, 0, 0.6);
+    --shadow-header: 0 12px 24px rgba(0, 0, 0, 0.25);
+    --shadow-float: 0 6px 18px rgba(0, 0, 0, 0.35);
+    --shadow-chip: 0 6px 14px rgba(0, 0, 0, 0.35);
     --brand-tint-08: rgba(125, 214, 161, 0.08);
     --brand-tint-12: rgba(125, 214, 161, 0.12);
     --brand-tint-20: rgba(125, 214, 161, 0.2);
@@ -80,7 +95,7 @@
   --surface-white: #ffffff;
   --surface-card: #ffffff;
   --border-subtle: #c8d6cf;
-  --surface-input: #f6fbf7;
+  --surface-input: var(--surface-card);
   --brand-tint-08: rgba(31, 95, 69, 0.08);
   --brand-tint-12: rgba(31, 95, 69, 0.12);
   --brand-tint-20: rgba(31, 95, 69, 0.2);
@@ -100,7 +115,11 @@
   --surface-white: #111614;
   --surface-card: #141b18;
   --border-subtle: #27332c;
-  --surface-input: #101714;
+  --surface-input: var(--surface-card);
+  --overlay-backdrop: rgba(0, 0, 0, 0.6);
+  --shadow-header: 0 12px 24px rgba(0, 0, 0, 0.25);
+  --shadow-float: 0 6px 18px rgba(0, 0, 0, 0.35);
+  --shadow-chip: 0 6px 14px rgba(0, 0, 0, 0.35);
   --brand-tint-08: rgba(125, 214, 161, 0.08);
   --brand-tint-12: rgba(125, 214, 161, 0.12);
   --brand-tint-20: rgba(125, 214, 161, 0.2);
@@ -236,4 +255,20 @@
   --brand-tint-08: rgba(255, 179, 106, 0.08);
   --brand-tint-12: rgba(255, 179, 106, 0.12);
   --brand-tint-20: rgba(255, 179, 106, 0.2);
+}
+
+@supports (color: color-mix(in srgb, white, black)) {
+  :root,
+  :root:not([data-theme]),
+  :root[data-theme='light'],
+  :root[data-theme='dark'] {
+    --surface-input: color-mix(in srgb, var(--surface-card) 90%, var(--brand-primary) 10%);
+    --status-danger: color-mix(in srgb, #b7382d 70%, var(--brand-primary) 30%);
+    --status-danger-strong: color-mix(in srgb, #9e2f26 70%, var(--brand-primary) 30%);
+    --status-success: color-mix(in srgb, #1f7a4d 70%, var(--brand-primary) 30%);
+    --status-warning: color-mix(in srgb, #a36800 70%, var(--brand-primary) 30%);
+    --status-danger-border: color-mix(in srgb, var(--status-danger) 30%, transparent);
+    --status-danger-border-strong: color-mix(in srgb, var(--status-danger-strong) 45%, transparent);
+    --select-arrow-color: color-mix(in srgb, var(--text-muted) 70%, var(--brand-primary) 30%);
+  }
 }

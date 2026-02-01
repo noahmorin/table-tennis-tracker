@@ -40,6 +40,9 @@ body {
   justify-content: space-between;
   padding: var(--space-2xl) var(--space-2xl) var(--space-sm);
   gap: var(--space-sm);
+  background: var(--surface-card);
+  border-bottom: 1px solid var(--border-subtle);
+  box-shadow: var(--shadow-header);
 }
 
 .header-actions {
@@ -110,13 +113,13 @@ body {
 
 .ghost-btn--danger {
   padding: var(--space-sm) var(--space-lg);
-  border-color: rgba(183, 56, 45, 0.3);
-  color: #b7382d;
+  border-color: var(--status-danger-border);
+  color: var(--status-danger);
 }
 
 .ghost-btn--danger:hover {
-  border-color: rgba(183, 56, 45, 0.6);
-  color: #9e2f26;
+  border-color: var(--status-danger-border-strong);
+  color: var(--status-danger-strong);
 }
 
 .ghost-btn__icon {
@@ -153,13 +156,13 @@ body {
 
 .app-main {
   flex: 1;
-  padding: 0 var(--space-2xl) var(--space-3xl);
+  padding: var(--space-2xl) var(--space-2xl) var(--space-3xl);
 }
 
 .page {
   display: flex;
   flex-direction: column;
-  gap: var(--space-2xl);
+  gap: var(--space-xl);
   animation: page-in 0.35s ease-out;
 }
 
@@ -205,7 +208,7 @@ body {
   display: grid;
   gap: var(--space-lg);
   background: var(--surface-card);
-  padding: var(--space-xl);
+  padding: var(--space-md);
   border-radius: var(--radius-card);
   border: 1px solid var(--brand-tint-08);
   box-shadow: var(--shadow-card);
@@ -234,7 +237,7 @@ body {
 .auth-toggle__btn.is-active {
   background: var(--surface-card);
   color: var(--text-primary);
-  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.08);
+  box-shadow: var(--shadow-float);
 }
 
 .auth-page .auth-toggle {
@@ -259,11 +262,11 @@ body {
 }
 
 .field-hint.is-error {
-  color: #b7382d;
+  color: var(--status-danger);
 }
 
 .field-hint.is-success {
-  color: #1f7a4d;
+  color: var(--status-success);
 }
 
 .field input,
@@ -272,10 +275,23 @@ body {
   width: 100%;
   border-radius: var(--radius-control);
   border: 1px solid var(--border-subtle);
-  padding: var(--space-sm) var(--space-md);
+  padding: var(--space-xs) var(--space-sm);
   font-size: 14px;
   font-family: 'Space Grotesk', sans-serif;
   background: var(--surface-input);
+}
+
+.field select {
+  padding-right: calc(var(--space-md) + 20px);
+  -webkit-appearance: none;
+  -moz-appearance: none;
+  appearance: none;
+  background-image:
+    linear-gradient(45deg, transparent 50%, var(--select-arrow-color) 50%),
+    linear-gradient(135deg, var(--select-arrow-color) 50%, transparent 50%);
+  background-repeat: no-repeat;
+  background-position: right 16px center, right 10px center;
+  background-size: 6px 6px;
 }
 
 .auth-page .field input,
@@ -314,15 +330,15 @@ body {
 }
 
 .form-message.is-error {
-  color: #b7382d;
+  color: var(--status-danger);
 }
 
 .form-message.is-success {
-  color: #1f7a4d;
+  color: var(--status-success);
 }
 
 .form-message.is-warning {
-  color: #a36800;
+  color: var(--status-warning);
 }
 
 .timeline {
@@ -376,7 +392,7 @@ body {
 }
 
 .theme-dialog::backdrop {
-  background: rgba(0, 0, 0, 0.45);
+  background: var(--overlay-backdrop);
   backdrop-filter: blur(4px);
 }
 
@@ -486,7 +502,7 @@ body {
   background: var(--swatch);
   padding: 0;
   cursor: pointer;
-  box-shadow: 0 6px 14px rgba(0, 0, 0, 0.08);
+  box-shadow: var(--shadow-chip);
 }
 
 .theme-color-option:hover {
