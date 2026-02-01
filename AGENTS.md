@@ -1,6 +1,6 @@
 # Table Tennis Tracker App - Codex Agent Plan
 
-Last updated: 2026-01-30
+Last updated: 2026-02-01
 
 This file is the single, authoritative context pack for in-repo Codex/VSCode agents.
 Use it as the default reference for code, schema, and UI decisions.
@@ -193,7 +193,9 @@ Columns:
 - audit columns
 
 Notes:
-- Profiles may exist before auth; `auth_user_id` links to Supabase auth later.
+- Profiles are created via the auth trigger; no pre-seeding.
+- `auth_user_id` is the access handle and should be set for active users.
+- `is_active` is informational only and does not gate access.
 - Historical matches reference profiles only (never auth users).
 
 Constraints:
@@ -315,16 +317,6 @@ Behavior:
 - Sets active `games.is_active=false` with updated pair.
 - Inserts `audit_log` row with action `void` and `before_data`.
 
-### 12.4 `profile_link_auth(...) -> void`
-Signature:
-- `(p_profile_id uuid, p_auth_user_id uuid, p_updated_by uuid)`
-
-Behavior:
-- Locks profile row; captures `before` snapshot.
-- Rejects if any profile already linked to that auth user.
-- Updates `profiles.auth_user_id`, sets `is_active=true`, sets updated pair.
-- Inserts `audit_log` row with action `link_auth`, includes `before_data` and `after_data` with auth id.
-
 ---
 
 ## 13. Access model and permissions (current db state)
@@ -346,7 +338,7 @@ Note: Broad grants mean RLS/policies are the real gate. Treat "write paths" as p
 - Apply date filters before sorting/computation.
 
 ### 14.2 Mutations
-- Prefer calling DB functions (`match_create`, `match_update`, `match_void`, `profile_link_auth`) over ad-hoc inserts/updates.
+- Prefer calling DB functions (`match_create`, `match_update`, `match_void`) over ad-hoc inserts/updates.
 - Ensure the UI provides `created_by/updated_by` as the current profile id.
 - Never hard-delete matches or games from the application.
 
@@ -368,7 +360,7 @@ Note: Broad grants mean RLS/policies are the real gate. Treat "write paths" as p
 - `games` has duplicated UNIQUE constraints for `(match_id, game_number)`.
 - `games` also has duplicated match_id indexes (`idx_games_match`, `idx_games_match_id`).
 
-These can be cleaned later, but do not ship changes that risk drift unless intentionally migrating.
+Apply `supabase/games-index-fix.sql` to clean this up intentionally.
 
 ---
 

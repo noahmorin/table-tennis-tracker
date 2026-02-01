@@ -1,4 +1,4 @@
-A lightweight, mobile-first Progressive Web App for tracking competitive table tennis matches within a single office.
+A lightweight, mobile-first web app for tracking competitive table tennis matches within a single office.
 
 The system prioritizes **simplicity, correctness, auditability, and zero-cost hosting**, while remaining extensible enough to support Elo ranking and future tournament modes.
 
@@ -39,7 +39,6 @@ Office-scale usage only (≈8–25 users).
 - Vue 3
 - TypeScript
 - Vite
-- vite-plugin-pwa
 - Mobile-first layout
 - Hosted on GitHub Pages
 
@@ -155,9 +154,8 @@ profiles (
 ### Notes
 
 - Profiles are created on signup via an `auth.users` trigger (using required metadata).
-- Admins may optionally pre-seed profiles (auth_user_id NULL) for future users.
-- `auth_user_id IS NULL` → cannot act, read-only
-- `is_active = true` + `auth_user_id` set → full access (via RLS)
+- Profiles are not pre-seeded; `auth_user_id` should always be set for active users.
+- Access is governed by Supabase Auth + RLS. `profiles.is_active` is informational only.
 - Historical matches remain intact even if auth is removed
 - Profiles are the **only identity referenced by matches**
 
@@ -575,7 +573,6 @@ Tournament matches:
 - `/submit-match`
 - `/leaderboard`
 - `/players/:id`
-- `/match-history`
 - `/my-matches`
 
 Mobile-first navigation (bottom tabs).
@@ -714,28 +711,22 @@ for each row execute function public.handle_new_user_profile();
 ### RLS policy intent (minimum)
 
 - `profiles`: authenticated read (including inactive); admin-only insert/update. No client-side profile creation.
-- `matches`/`games`: authenticated read (active only); insert/update by participants only; void admin-only via `match_void`.
+- `matches`/`games`: authenticated read (active only; admins may see inactive). App mutations go through `match_*`.
 - `competitions`: authenticated read (active only); admin-only insert/update.
 - `audit_log`: admin-only read; no direct client writes (functions/triggers only).
 
 Notes:
 - If you lock down `audit_log` inserts, `match_create`, `match_update`, and `match_void` must be security definer and must validate that the caller is a participant (or admin for voids).
 - Consider helper functions like `current_profile_id()` and `is_admin()` to keep RLS policies readable.
+- If you want to enforce RPC-only writes, drop the direct insert/update policies on `matches` and `games`.
 
 ### Match functions
 
 - `match_create`, `match_update`, `match_void` are security definer and enforce participant/admin checks.
 - SQL lives in `supabase/match-functions.sql`.
 
-### Known schema caveat
+### Schema fix (required for `match_update`)
 
 - `match_update` soft-deactivates old games then inserts replacements with the same `(match_id, game_number)`.
-- If the unique constraint on `games(match_id, game_number)` is not partial, updates will fail.
-- Preferred fix: replace the unique constraint with a partial unique index on active rows only:
-
-```sql
-drop index if exists public.games_match_id_game_number_key;
-create unique index if not exists games_match_id_game_number_active
-  on public.games (match_id, game_number)
-  where is_active = true;
-```
+- A full unique constraint on `(match_id, game_number)` will block updates.
+- Apply `supabase/games-index-fix.sql` to replace the full unique constraint with a partial unique index and drop duplicate indexes.
