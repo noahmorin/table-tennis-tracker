@@ -393,6 +393,7 @@ const columnDefs = computed<ColDef[]>(() => [
     width: 80,
     minWidth: 80,
     maxWidth: 80,
+    suppressSizeToFit: true,
     cellClass: 'game-label',
     cellStyle: { textAlign: 'center' },
     valueGetter: (params) => (params.data ? `Game ${params.data.gameNumber}` : '')
@@ -401,9 +402,8 @@ const columnDefs = computed<ColDef[]>(() => [
     headerName: player1Label.value,
     field: 'player1Score',
     editable: true,
-    width: 140,
-    minWidth: 140,
-    maxWidth: 140,
+    minWidth: 120,
+    flex: 1,
     cellStyle: { textAlign: 'center' },
     valueSetter: (params) => {
       const raw = String(params.newValue ?? '').trim();
@@ -430,9 +430,8 @@ const columnDefs = computed<ColDef[]>(() => [
     headerName: player2Label.value,
     field: 'player2Score',
     editable: true,
-    width: 140,
-    minWidth: 140,
-    maxWidth: 140,
+    minWidth: 120,
+    flex: 1,
     cellStyle: { textAlign: 'center' },
     valueSetter: (params) => {
       const raw = String(params.newValue ?? '').trim();
