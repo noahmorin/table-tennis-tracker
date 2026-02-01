@@ -23,7 +23,9 @@ const dialogRef = ref<HTMLDialogElement | null>(null);
 const isDark = computed(() => theme.value === 'dark');
 const activeThemeLabel = computed(() => (isDark.value ? 'Dark' : 'Light'));
 const showBottomNav = computed(() => isAuthenticated.value);
-const profileLabel = computed(() => profile.value?.username ?? user.value?.email ?? '');
+const profileLabel = computed(
+  () => profile.value?.display_name ?? profile.value?.username ?? user.value?.email ?? ''
+);
 
 const themeColors: Array<{ id: ThemeColor; label: string; swatch: string }> = [
   { id: 'red', label: 'Red', swatch: '#c0392b' },
@@ -109,7 +111,7 @@ onMounted(() => {
         <h1>{{ appName }}</h1>
       </div>
       <div class="header-actions">
-        <div v-if="isAuthenticated" class="user-pill">@{{ profileLabel }}</div>
+        <div v-if="isAuthenticated" class="user-pill">{{ profileLabel }}</div>
         <button class="gear-button" type="button" aria-label="Theme settings" @click="openThemeDialog">
           <Settings aria-hidden="true" class="gear-icon" />
         </button>

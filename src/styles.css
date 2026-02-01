@@ -237,6 +237,15 @@ body {
   box-shadow: 0 6px 18px rgba(0, 0, 0, 0.08);
 }
 
+.auth-page .auth-toggle {
+  background: var(--brand-tint-12);
+  border-color: var(--brand-tint-20);
+}
+
+.auth-page .auth-toggle__btn.is-active {
+  color: var(--brand-primary);
+}
+
 .field {
   display: grid;
   gap: var(--space-xs);
@@ -267,6 +276,13 @@ body {
   font-size: 14px;
   font-family: 'Space Grotesk', sans-serif;
   background: var(--surface-input);
+}
+
+.auth-page .field input,
+.auth-page .field select,
+.auth-page .field textarea {
+  background: var(--brand-tint-08);
+  border-color: var(--brand-tint-20);
 }
 
 .field-row {
