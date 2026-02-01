@@ -30,6 +30,3 @@
 
 ## Deploy
 - [ ] Document GitHub Pages build/deploy steps and base path expectations.
-
-## Documentation alignment
-- [ ] Update `DOCUMENTATION.md`/`README.md` to match current auth choice (email + password) and routes.
