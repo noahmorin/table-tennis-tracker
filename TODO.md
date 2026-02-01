@@ -22,8 +22,7 @@
 - [ ] Decide on `/match-history` route vs `/my-matches`, update router/nav/docs.
 - [ ] Add loading/empty/error states for data pages.
 
-## PWA & deploy
-- [ ] Add `vite-plugin-pwa` setup, manifest, and icons.
+## Deploy
 - [ ] Document GitHub Pages build/deploy steps and base path expectations.
 
 ## Documentation alignment
