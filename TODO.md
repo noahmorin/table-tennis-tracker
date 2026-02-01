@@ -1,16 +1,5 @@
 # TODO
 
-## Supabase setup
-- [ ] Create/verify DB functions: `match_create`, `match_update`, `match_void` (security definer).
-
-## Data layer
-- [ ] Build typed data layer for `profiles`, `matches`, `games`, `competitions`, `audit_log`.
-- [ ] Centralize DB error mapping (e.g., unique username, missing profile).
-
-## Auth & session
-- [ ] Persist and expose `profile_id` for downstream mutations.
-- [ ] Gate match mutations on authenticated `profile_id` and surface clear errors.
-
 ## Match submission / edit / void
 - [ ] Build submit match form (opponent, date, scores, format, notes).
 - [ ] Enforce client validation (min 11, win by 2, best-of rules).

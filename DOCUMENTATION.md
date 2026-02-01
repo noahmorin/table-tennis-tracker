@@ -706,13 +706,36 @@ after insert on auth.users
 for each row execute function public.handle_new_user_profile();
 ```
 
+### Username availability RPC
+
+- `public.username_available(text) -> boolean` is used by the signup form to avoid duplicate usernames.
+- SQL lives in `supabase/username-available.sql`.
+
 ### RLS policy intent (minimum)
 
-- `profiles`: authenticated read (active); admin-only insert/update. No client-side profile creation.
-- `matches`/`games`: authenticated read (active); insert/update by participants only; void admin-only via `match_void`.
-- `competitions`: authenticated read (active); admin-only insert/update.
+- `profiles`: authenticated read (including inactive); admin-only insert/update. No client-side profile creation.
+- `matches`/`games`: authenticated read (active only); insert/update by participants only; void admin-only via `match_void`.
+- `competitions`: authenticated read (active only); admin-only insert/update.
 - `audit_log`: admin-only read; no direct client writes (functions/triggers only).
 
 Notes:
 - If you lock down `audit_log` inserts, `match_create`, `match_update`, and `match_void` must be security definer and must validate that the caller is a participant (or admin for voids).
 - Consider helper functions like `current_profile_id()` and `is_admin()` to keep RLS policies readable.
+
+### Match functions
+
+- `match_create`, `match_update`, `match_void` are security definer and enforce participant/admin checks.
+- SQL lives in `supabase/match-functions.sql`.
+
+### Known schema caveat
+
+- `match_update` soft-deactivates old games then inserts replacements with the same `(match_id, game_number)`.
+- If the unique constraint on `games(match_id, game_number)` is not partial, updates will fail.
+- Preferred fix: replace the unique constraint with a partial unique index on active rows only:
+
+```sql
+drop index if exists public.games_match_id_game_number_key;
+create unique index if not exists games_match_id_game_number_active
+  on public.games (match_id, game_number)
+  where is_active = true;
+```
