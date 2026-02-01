@@ -45,7 +45,8 @@ The app is intended for **trusted users** in a small, internal league (e.g. an o
 ### Backend / Data
 - Supabase
   - PostgreSQL (free tier)
-  - Supabase Auth (email + password)
+  - Supabase Auth (email + password, email confirmation disabled)
+  - Profiles are created on signup via a DB trigger (using auth metadata)
 - No custom backend services
 - Frontend communicates directly with Supabase via SDK
 
