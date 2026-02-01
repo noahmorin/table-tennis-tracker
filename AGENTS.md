@@ -129,10 +129,9 @@ UI expectation: mobile-first with bottom tab navigation.
 
 ---
 
-## 9.1 Admin mode (overlay)
-- Admin mode toggle lives in the settings modal and is only visible to admins (`profiles.is_admin = true`).
-- When enabled, show a persistent admin-mode indicator.
-- Admin mode overlays existing pages; no separate admin routes.
+## 9.1 Admin controls (inline)
+- Admin-only controls are inline on existing pages (hidden for non-admins).
+- No global admin mode, toggle, or banner.
 - Admins can create, edit, and void matches for any players.
 - Inactive matches/games are hidden by default; admin views can include an optional "include inactive" filter.
 - Audit log remains database-only (no frontend surface).

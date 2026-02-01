@@ -583,11 +583,10 @@ Mobile-first navigation (bottom tabs).
 
 ---
 
-## 11.1 Admin Mode (Overlay)
+## 11.1 Admin Controls (Inline)
 
-- Admin mode is a toggle in the settings modal and is only visible to admins (`profiles.is_admin = true`).
-- When enabled, show a persistent admin-mode indicator.
-- Admin mode overlays existing pages; no separate admin routes.
+- Admin-only controls are inline on existing pages (hidden for non-admins).
+- No global admin mode, toggle, or banner.
 - Admins can create matches for any two players (select player 1 + player 2), edit any match, and void any match.
 - Inactive matches/games are hidden by default; admin views can include an optional "include inactive" filter.
 - The audit log remains database-only (no frontend surface).

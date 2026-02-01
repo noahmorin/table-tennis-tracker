@@ -31,6 +31,7 @@ const profileError = ref<string | null>(null);
 const user = computed(() => session.value?.user ?? null);
 const isAuthenticated = computed(() => !!session.value && !!profile.value);
 const profileId = computed(() => profile.value?.id ?? cachedProfileId.value);
+const isAdmin = computed(() => profile.value?.is_admin ?? false);
 
 let initPromise: Promise<void> | null = null;
 let authSubscription: { unsubscribe: () => void } | null = null;
@@ -238,6 +239,7 @@ export const useAuth = () => ({
   authLoading,
   profileLoading,
   profileError,
+  isAdmin,
   isAuthenticated,
   initAuth,
   signInWithPassword,
