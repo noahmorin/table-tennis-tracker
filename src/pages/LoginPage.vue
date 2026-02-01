@@ -8,14 +8,10 @@ const {
   authLoading,
   profileLoading,
   profileError,
-  profileWarning,
-  user,
   isAuthenticated,
-  needsProfileSetup,
   signInWithPassword,
   signUpWithEmail,
   signOut,
-  completeProfileSetup,
   checkUsernameAvailability
 } = useAuth();
 
@@ -36,16 +32,10 @@ const usernameAvailable = ref<boolean | null>(null);
 const submitting = ref(false);
 
 const headerTitle = computed(() => {
-  if (needsProfileSetup.value) {
-    return 'Complete Your Profile';
-  }
   return mode.value === 'sign-up' ? 'Create Account' : 'Sign In';
 });
 
 const headerCopy = computed(() => {
-  if (needsProfileSetup.value) {
-    return 'Finish your profile details to enter the league.';
-  }
   return mode.value === 'sign-up'
     ? 'Create your league profile with email and password.'
     : 'Use your league email to submit and edit matches.';
@@ -61,19 +51,6 @@ watch(isAuthenticated, (value) => {
     router.replace('/leaderboard');
   }
 });
-
-watch(
-  () => needsProfileSetup.value,
-  (value) => {
-    if (value && user.value) {
-      const metadata = user.value.user_metadata ?? {};
-      username.value = String(metadata.username ?? username.value ?? '');
-      firstName.value = String(metadata.first_name ?? firstName.value ?? '');
-      lastName.value = String(metadata.last_name ?? lastName.value ?? '');
-    }
-  },
-  { immediate: true }
-);
 
 watch(mode, () => {
   infoMessage.value = null;
@@ -170,36 +147,12 @@ const handleSignUp = async () => {
       : 'Account created. Signing you in now.';
     errorMessage.value = null;
   } catch (error) {
-    errorMessage.value = error instanceof Error ? error.message : 'Sign-up failed.';
-  } finally {
-    submitting.value = false;
-  }
-};
-
-const handleProfileSetup = async () => {
-  infoMessage.value = null;
-  errorMessage.value = validateUsername(username.value) ?? null;
-  if (errorMessage.value) {
-    return;
-  }
-  if (!firstName.value.trim() || !lastName.value.trim()) {
-    errorMessage.value = 'First and last name are required.';
-    return;
-  }
-
-  submitting.value = true;
-  try {
-    const result = await completeProfileSetup({
-      username: username.value,
-      firstName: firstName.value,
-      lastName: lastName.value
-    });
-
-    if (!result.success) {
-      errorMessage.value = profileError.value ?? 'Profile setup failed.';
+    const usernameCheck = await checkUsernameAvailability(username.value);
+    if (usernameCheck.available === false) {
+      errorMessage.value = usernameCheck.message;
+    } else {
+      errorMessage.value = 'Signup failed. Check your details and try again.';
     }
-  } catch (error) {
-    errorMessage.value = error instanceof Error ? error.message : 'Profile setup failed.';
   } finally {
     submitting.value = false;
   }
@@ -226,6 +179,7 @@ const checkUsername = async () => {
 const handleSignOut = async () => {
   await signOut();
 };
+
 </script>
 
 <template>
@@ -235,52 +189,9 @@ const handleSignOut = async () => {
       <p>{{ headerCopy }}</p>
     </header>
 
-    <div v-if="authLoading && !submitting" class="card">
+    <div v-if="(authLoading || profileLoading) && !submitting" class="card">
       <p>Checking your session...</p>
     </div>
-
-    <form v-else-if="needsProfileSetup" class="form-card" @submit.prevent="handleProfileSetup">
-      <p class="form-note">Signed in as {{ user?.email }}</p>
-
-      <label class="field">
-        <span>Username</span>
-        <input
-          v-model="username"
-          type="text"
-          placeholder="first.last"
-          autocomplete="username"
-          @blur="checkUsername"
-        />
-        <span
-          v-if="usernameStatus"
-          class="field-hint"
-          :class="{ 'is-error': usernameAvailable === false, 'is-success': usernameAvailable }"
-        >
-          {{ usernameStatus }}
-        </span>
-      </label>
-
-      <div class="field-row">
-        <label class="field">
-          <span>First name</span>
-          <input v-model="firstName" type="text" placeholder="First name" autocomplete="given-name" />
-        </label>
-        <label class="field">
-          <span>Last name</span>
-          <input v-model="lastName" type="text" placeholder="Last name" autocomplete="family-name" />
-        </label>
-      </div>
-
-      <button class="primary-btn" type="submit" :disabled="submitting || profileLoading">
-        Complete Profile
-      </button>
-
-      <button class="ghost-btn" type="button" @click="handleSignOut">Sign Out</button>
-
-      <p v-if="profileError" class="form-message is-error">{{ profileError }}</p>
-      <p v-if="profileWarning" class="form-message is-warning">{{ profileWarning }}</p>
-      <p v-if="errorMessage" class="form-message is-error">{{ errorMessage }}</p>
-    </form>
 
     <form v-else class="form-card" @submit.prevent="mode === 'sign-in' ? handleSignIn() : handleSignUp()">
       <div class="auth-toggle">
@@ -351,12 +262,22 @@ const handleSignOut = async () => {
         <input v-model="confirmPassword" type="password" autocomplete="new-password" placeholder="********" />
       </label>
 
-      <button class="primary-btn" type="submit" :disabled="submitting">
+      <button class="primary-btn" type="submit" :disabled="submitting || profileLoading">
         {{ mode === 'sign-in' ? 'Sign In' : 'Create Account' }}
       </button>
 
       <p v-if="infoMessage" class="form-message is-success">{{ infoMessage }}</p>
       <p v-if="errorMessage" class="form-message is-error">{{ errorMessage }}</p>
+      <p v-if="profileError" class="form-message is-error">{{ profileError }}</p>
+      <button
+        v-if="profileError"
+        class="ghost-btn"
+        type="button"
+        :disabled="submitting || profileLoading"
+        @click="handleSignOut"
+      >
+        Sign Out
+      </button>
     </form>
   </section>
 </template>
