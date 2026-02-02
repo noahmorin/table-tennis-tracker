@@ -31,7 +31,7 @@
   --brand-tint-20: rgba(31, 95, 69, 0.2);
   --surface-glass: rgba(255, 255, 255, 0.7);
 
-  --shadow-card: 0 12px 40px rgba(31, 95, 69, 0.12);
+  --shadow-card: 0 4px 15px rgba(31, 95, 69, 0.12);
   --shadow-nav: 0 -8px 24px rgba(31, 95, 69, 0.08);
   --radius-card: 22px;
   --radius-control: 16px;
@@ -76,7 +76,7 @@
     --brand-tint-12: rgba(125, 214, 161, 0.12);
     --brand-tint-20: rgba(125, 214, 161, 0.2);
     --surface-glass: rgba(20, 27, 24, 0.75);
-    --shadow-card: 0 12px 40px rgba(0, 0, 0, 0.35);
+    --shadow-card: 0 4px 15px rgba(0, 0, 0, 0.35);
     --shadow-nav: 0 -8px 24px rgba(0, 0, 0, 0.4);
     --app-gradient-inner: #0c110f;
     --app-gradient-mid: #0f1512;
@@ -100,7 +100,7 @@
   --brand-tint-12: rgba(31, 95, 69, 0.12);
   --brand-tint-20: rgba(31, 95, 69, 0.2);
   --surface-glass: rgba(255, 255, 255, 0.7);
-  --shadow-card: 0 12px 40px rgba(31, 95, 69, 0.12);
+  --shadow-card: 0 4px 15px rgba(31, 95, 69, 0.12);
   --shadow-nav: 0 -8px 24px rgba(31, 95, 69, 0.08);
 }
 
@@ -124,7 +124,7 @@
   --brand-tint-12: rgba(125, 214, 161, 0.12);
   --brand-tint-20: rgba(125, 214, 161, 0.2);
   --surface-glass: rgba(20, 27, 24, 0.75);
-  --shadow-card: 0 12px 40px rgba(0, 0, 0, 0.35);
+  --shadow-card: 0 4px 15px rgba(0, 0, 0, 0.35);
   --shadow-nav: 0 -8px 24px rgba(0, 0, 0, 0.4);
   --app-gradient-inner: #0c110f;
   --app-gradient-mid: #0f1512;
@@ -137,7 +137,7 @@
   --brand-tint-08: rgba(192, 57, 43, 0.08);
   --brand-tint-12: rgba(192, 57, 43, 0.12);
   --brand-tint-20: rgba(192, 57, 43, 0.2);
-  --shadow-card: 0 12px 40px rgba(192, 57, 43, 0.12);
+  --shadow-card: 0 4px 15px rgba(192, 57, 43, 0.12);
   --shadow-nav: 0 -8px 24px rgba(192, 57, 43, 0.08);
 }
 
@@ -147,7 +147,7 @@
   --brand-tint-08: rgba(30, 90, 168, 0.08);
   --brand-tint-12: rgba(30, 90, 168, 0.12);
   --brand-tint-20: rgba(30, 90, 168, 0.2);
-  --shadow-card: 0 12px 40px rgba(30, 90, 168, 0.12);
+  --shadow-card: 0 4px 15px rgba(30, 90, 168, 0.12);
   --shadow-nav: 0 -8px 24px rgba(30, 90, 168, 0.08);
 }
 
@@ -157,7 +157,7 @@
   --brand-tint-08: rgba(31, 122, 77, 0.08);
   --brand-tint-12: rgba(31, 122, 77, 0.12);
   --brand-tint-20: rgba(31, 122, 77, 0.2);
-  --shadow-card: 0 12px 40px rgba(31, 122, 77, 0.12);
+  --shadow-card: 0 4px 15px rgba(31, 122, 77, 0.12);
   --shadow-nav: 0 -8px 24px rgba(31, 122, 77, 0.08);
 }
 
@@ -167,7 +167,7 @@
   --brand-tint-08: rgba(106, 63, 160, 0.08);
   --brand-tint-12: rgba(106, 63, 160, 0.12);
   --brand-tint-20: rgba(106, 63, 160, 0.2);
-  --shadow-card: 0 12px 40px rgba(106, 63, 160, 0.12);
+  --shadow-card: 0 4px 15px rgba(106, 63, 160, 0.12);
   --shadow-nav: 0 -8px 24px rgba(106, 63, 160, 0.08);
 }
 
@@ -177,7 +177,7 @@
   --brand-tint-08: rgba(193, 70, 127, 0.08);
   --brand-tint-12: rgba(193, 70, 127, 0.12);
   --brand-tint-20: rgba(193, 70, 127, 0.2);
-  --shadow-card: 0 12px 40px rgba(193, 70, 127, 0.12);
+  --shadow-card: 0 4px 15px rgba(193, 70, 127, 0.12);
   --shadow-nav: 0 -8px 24px rgba(193, 70, 127, 0.08);
 }
 
@@ -187,7 +187,7 @@
   --brand-tint-08: rgba(181, 138, 0, 0.08);
   --brand-tint-12: rgba(181, 138, 0, 0.12);
   --brand-tint-20: rgba(181, 138, 0, 0.2);
-  --shadow-card: 0 12px 40px rgba(181, 138, 0, 0.12);
+  --shadow-card: 0 4px 15px rgba(181, 138, 0, 0.12);
   --shadow-nav: 0 -8px 24px rgba(181, 138, 0, 0.08);
 }
 
@@ -197,7 +197,7 @@
   --brand-tint-08: rgba(211, 108, 31, 0.08);
   --brand-tint-12: rgba(211, 108, 31, 0.12);
   --brand-tint-20: rgba(211, 108, 31, 0.2);
-  --shadow-card: 0 12px 40px rgba(211, 108, 31, 0.12);
+  --shadow-card: 0 4px 15px rgba(211, 108, 31, 0.12);
   --shadow-nav: 0 -8px 24px rgba(211, 108, 31, 0.08);
 }
 
