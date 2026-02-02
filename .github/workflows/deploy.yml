@@ -29,6 +29,9 @@ jobs:
           VITE_BASE_PATH: /table-tennis-tracker/
           VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
           VITE_SUPABASE_ANON_KEY: ${{ secrets.VITE_SUPABASE_ANON_KEY }}
+          VITE_APP_NAME: ${{ vars.VITE_APP_NAME }}
+          VITE_APP_SHORT_NAME: ${{ vars.VITE_APP_SHORT_NAME }}
+          VITE_APP_LEAGUE_LABEL: ${{ vars.VITE_APP_LEAGUE_LABEL }}
       - uses: actions/upload-pages-artifact@v3
         with:
           path: dist
