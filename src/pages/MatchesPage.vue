@@ -372,23 +372,27 @@ const loadMatches = async () => {
 
   matchesLoading.value = true;
   matchesError.value = null;
+  try {
+    const { data, error } = await listMatches({
+      includeInactive: isAdmin.value ? includeInactive.value : false,
+      playerId: targetPlayerId.value,
+      dateFrom: dateFrom.value || undefined,
+      dateTo: dateTo.value || undefined
+    });
 
-  const { data, error } = await listMatches({
-    includeInactive: isAdmin.value ? includeInactive.value : false,
-    playerId: targetPlayerId.value,
-    dateFrom: dateFrom.value || undefined,
-    dateTo: dateTo.value || undefined
-  });
-
-  if (error) {
-    matchesError.value = error;
+    if (error) {
+      matchesError.value = error;
+      matches.value = [];
+    } else {
+      matches.value = data ?? [];
+    }
+  } catch (err) {
+    matchesError.value = err instanceof Error ? err.message : 'Network error loading matches.';
     matches.value = [];
-  } else {
-    matches.value = data ?? [];
+  } finally {
+    matchesLoading.value = false;
+    void loadEloDeltas();
   }
-
-  matchesLoading.value = false;
-  void loadEloDeltas();
 };
 
 const loadEloDeltas = async () => {

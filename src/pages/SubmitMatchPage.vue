@@ -165,15 +165,22 @@ const resetForm = () => {
 const loadPlayers = async () => {
   playersLoading.value = true;
   playersError.value = null;
-  const { data, error } = await listProfiles({ includeInactive: isAdmin.value });
-  if (error) {
-    playersError.value = error;
+  try {
+    const { data, error } = await listProfiles({ includeInactive: isAdmin.value });
+    if (error) {
+      playersError.value = error;
+      players.value = [];
+    } else {
+      players.value = data ?? [];
+    }
+  } catch (err) {
+    playersError.value =
+      err instanceof Error ? err.message : 'Network error loading players.';
     players.value = [];
-  } else {
-    players.value = data ?? [];
+  } finally {
+    playersLoading.value = false;
+    gridApi.value?.refreshHeader();
   }
-  playersLoading.value = false;
-  gridApi.value?.refreshHeader();
 };
 
 const parseScore = (value: unknown) => {
