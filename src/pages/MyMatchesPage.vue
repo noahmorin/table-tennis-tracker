@@ -54,8 +54,10 @@ const setsByFormat: Record<MatchFormat, number> = {
 const includeInactive = ref(false);
 const dateFrom = ref('');
 const dateTo = ref('');
-const sortOrder = ref<SortOption | ''>('');
+const sortOrder = ref<SortOption | ''>('date_desc');
 const opponentId = ref('');
+const filterWins = ref(true);
+const filterLosses = ref(true);
 
 const matches = ref<MatchRow[]>([]);
 const matchesLoading = ref(false);
@@ -155,6 +157,22 @@ const visibleMatches = computed(() => {
       }
       const otherId = isTargetP1 ? match.player2_id : match.player1_id;
       return otherId === opponentId.value;
+    });
+  }
+
+  if (targetPlayerId.value && !(filterWins.value && filterLosses.value)) {
+    list = list.filter((match) => {
+      if (!match.winner_user_id) {
+        return false;
+      }
+      const isWin = match.winner_user_id === targetPlayerId.value;
+      if (isWin && filterWins.value) {
+        return true;
+      }
+      if (!isWin && filterLosses.value) {
+        return true;
+      }
+      return false;
     });
   }
 
@@ -715,7 +733,7 @@ const defaultColDef: ColDef = {
   suppressSizeToFit: true
 };
 
-watch([includeInactive, dateFrom, dateTo, opponentId, sortOrder, profile, isAdmin], () => {
+watch([includeInactive, dateFrom, dateTo, opponentId, sortOrder, filterWins, filterLosses, profile, isAdmin], () => {
   if (profile.value) {
     loadMatches();
   }
@@ -729,6 +747,8 @@ watch(
       return;
     }
     opponentId.value = '';
+    filterWins.value = true;
+    filterLosses.value = true;
     loadMatches();
   }
 );
@@ -833,15 +853,17 @@ onMounted(() => {
             <span v-if="profilesError" class="field-hint is-error">{{ profilesError }}</span>
           </label>
 
-          <label class="field">
-            <span>Date from</span>
-            <input v-model="dateFrom" type="date" :max="maxMatchDate" />
-          </label>
+          <div class="filter-date-row">
+            <label class="field">
+              <span>Date from</span>
+              <input v-model="dateFrom" type="date" :max="maxMatchDate" />
+            </label>
 
-          <label class="field">
-            <span>Date to</span>
-            <input v-model="dateTo" type="date" :max="maxMatchDate" />
-          </label>
+            <label class="field">
+              <span>Date to</span>
+              <input v-model="dateTo" type="date" :max="maxMatchDate" />
+            </label>
+          </div>
 
           <label class="field">
             <span>Sort by</span>
@@ -853,10 +875,21 @@ onMounted(() => {
             </select>
           </label>
 
-          <label v-if="isAdmin" class="filter-toggle">
-            <input v-model="includeInactive" type="checkbox" />
-            <span>Include inactive</span>
+        <div class="filter-toggle-group">
+          <label class="filter-toggle">
+            <input v-model="filterWins" type="checkbox" />
+            <span>Wins</span>
           </label>
+          <label class="filter-toggle">
+            <input v-model="filterLosses" type="checkbox" />
+            <span>Losses</span>
+          </label>
+        </div>
+
+        <label v-if="isAdmin" class="filter-toggle">
+          <input v-model="includeInactive" type="checkbox" />
+          <span>Include inactive</span>
+        </label>
         </div>
 
         <div class="filter-dialog__actions">
@@ -1010,6 +1043,12 @@ onMounted(() => {
   height: 16px;
 }
 
+.filter-toggle-group {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-xs);
+}
+
 .filter-dialog {
   width: min(560px, 94vw);
   border: none;
@@ -1050,6 +1089,12 @@ onMounted(() => {
 
 .filter-dialog__body {
   display: grid;
+  gap: var(--space-sm);
+}
+
+.filter-date-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
   gap: var(--space-sm);
 }
 
