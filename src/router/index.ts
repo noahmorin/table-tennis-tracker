@@ -1,7 +1,7 @@
 ﻿import { createRouter, createWebHashHistory } from 'vue-router';
 import LeaderboardPage from '../pages/LeaderboardPage.vue';
 import LoginPage from '../pages/LoginPage.vue';
-import MyMatchesPage from '../pages/MyMatchesPage.vue';
+import MatchesPage from '../pages/MatchesPage.vue';
 import PlayerProfilePage from '../pages/PlayerProfilePage.vue';
 import SubmitMatchPage from '../pages/SubmitMatchPage.vue';
 import { useAuth } from '../stores/auth';
@@ -12,8 +12,8 @@ const routes = [
   { path: '/submit-match', component: SubmitMatchPage, meta: { requiresAuth: true } },
   { path: '/leaderboard', component: LeaderboardPage, meta: { requiresAuth: true } },
   { path: '/players/:id', component: PlayerProfilePage, props: true, meta: { requiresAuth: true } },
-  { path: '/players/:id/matches', component: MyMatchesPage, props: true, meta: { requiresAuth: true } },
-  { path: '/my-matches', component: MyMatchesPage, meta: { requiresAuth: true } }
+  { path: '/players/:id/matches', component: MatchesPage, props: true, meta: { requiresAuth: true } },
+  { path: '/my-matches', component: MatchesPage, meta: { requiresAuth: true } }
 ];
 
 const router = createRouter({
