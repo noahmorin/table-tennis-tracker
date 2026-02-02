@@ -62,10 +62,7 @@ export const listMatches = async (options?: {
     query = query.lte('match_date', options.dateTo);
   }
 
-  const { data, error } = await query
-    .order('match_date', { ascending: true })
-    .order('created_at', { ascending: true })
-    .order('id', { ascending: true });
+  const { data, error } = await query;
 
   return { data: (data as MatchRow[]) ?? null, error: mapDbError(error) };
 };
@@ -120,6 +117,10 @@ export const updateMatch = async (input: UpdateMatchInput): Promise<DbResult<{ i
     p_match_id: input.matchId,
     p_games: input.games,
     p_notes: input.notes ?? null,
+    p_match_format: input.matchFormat ?? null,
+    p_match_date: input.matchDate ?? null,
+    p_player1_id: input.player1Id ?? null,
+    p_player2_id: input.player2Id ?? null,
     p_updated_by: profileId
   });
 
@@ -142,7 +143,7 @@ export const voidMatch = async (matchId: string): Promise<DbResult<{ id: string 
   });
 
   if (rpcError) {
-    return { data: null, error: mapDbError(rpcError, 'Unable to void match.') };
+    return { data: null, error: mapDbError(rpcError, 'Unable to delete match.') };
   }
 
   return { data: { id: matchId }, error: null };

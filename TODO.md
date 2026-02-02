@@ -1,11 +1,11 @@
 # TODO
 
-## Match submission / edit / void
+## Match submission / edit / delete
 - [x] Build submit match form (player 1/2, date, scores, format, notes).
 - [x] Enforce client validation (min 11, win by 2, best-of rules).
 - [x] Implement match creation via `match_create` (games JSON + notes).
-- [ ] Implement match editing via `match_update`.
-- [ ] Implement match voiding via `match_void`.
+- [x] Implement match editing via `match_update`.
+- [x] Implement match delete (soft) via `match_void`.
 - [ ] Ensure all mutations write to `audit_log`.
 
 ## Stats & Elo
@@ -18,14 +18,15 @@
 ## Pages & UX
 - [ ] Leaderboard page with filters + derived stats.
 - [ ] Player profile page (profile + inspect stats).
-- [ ] My matches page (match history, edit/void actions).
-- [ ] Decide on `/match-history` route vs `/my-matches`, update router/nav/docs.
+- [x] My matches page (match history, edit/delete actions).
+- [x] Use `/players/:id/matches` for match history routes.
+- [ ] Add desktop table view toggle for matches list.
 - [ ] Add loading/empty/error states for data pages.
 
 ## Admin actions (inline)
 - [ ] Inline admin-only controls (hidden for non-admins).
 - [ ] Allow admins to create matches for any players (select player 1 + player 2).
-- [ ] Allow admins to edit/void any match.
+- [ ] Allow admins to edit/delete any match.
 - [ ] Add "include inactive" filter where match lists are shown.
 
 ## Deploy

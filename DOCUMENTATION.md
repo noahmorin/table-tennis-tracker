@@ -105,7 +105,7 @@ OR
 ### Semantics
 
 - `is_active`
-    - Soft-delete / void flag
+    - Soft-delete flag
     - Inactive rows are excluded from stats, Elo, and leaderboards by default
 - `created_at`
     - Immutable timestamp of record creation
@@ -206,8 +206,8 @@ CHECK (match_format IN ('bo1','bo3','bo5','bo7'))
 - One row per real-world match
 - Derived fields are cached for read performance
 - Raw game scores remain the source of truth
-- `is_active = false` voids the match
-- Voided matches are excluded from stats and Elo by default
+- `is_active = false` deletes the match (soft)
+- Deleted matches are excluded from stats and Elo by default
 
 ---
 
@@ -293,7 +293,7 @@ audit_log (
   entity_type text NOT NULL, -- 'profile', 'match', 'game', 'competition'
   entity_id uuid NOT NULL,
 
-  action text NOT NULL, -- 'create', 'update', 'void', 'link_auth'
+  action text NOT NULL, -- 'create', 'update', 'delete', 'link_auth'
 
   before_data jsonb,
   after_data jsonb,
@@ -342,14 +342,16 @@ audit_log (
 
 - Either participant may edit a match
 - Admins may edit any match
+- Non-admins can edit format, scores, and notes
+- Admins can edit players, match date, format, scores, and notes
 - Match ID remains constant
 - Derived fields are recomputed
 - Audit log records before/after
 
-### Voiding
+### Deleting (soft)
 
 - Sets `is_active = false`
-- Admins may void any match
+- Admins may delete any match
 - No hard deletes
 - Excluded from stats/Elo by default
 
@@ -376,7 +378,7 @@ This guarantees:
 
 - Stable Elo
 - Correct back-dated inserts
-- Safe edits and voids
+- Safe edits and deletes
 
 ### Elo Defaults
 
@@ -578,7 +580,7 @@ Tournament matches:
 - `/submit-match`
 - `/leaderboard`
 - `/players/:id`
-- `/my-matches`
+- `/players/:id/matches`
 
 Mobile-first navigation (bottom tabs).
 
@@ -588,9 +590,18 @@ Mobile-first navigation (bottom tabs).
 
 - Admin-only controls are inline on existing pages (hidden for non-admins).
 - No global admin mode, toggle, or banner.
-- Admins can create matches for any two players (select player 1 + player 2), edit any match, and void any match.
+- Admins can create matches for any two players (select player 1 + player 2), edit any match, and delete any match.
 - Inactive matches/games are hidden by default; admin views can include an optional "include inactive" filter.
 - The audit log remains database-only (no frontend surface).
+
+---
+
+## 11.2 My Matches Page (Implementation Notes)
+
+- Filters (modal): opponent, date range, optional sort order.
+- Admin-only: include inactive toggle.
+- Cards show date, format, players/opponent, and match score.
+- Edit modal uses the submit-match layout; non-admins can edit format/scores/notes, admins can edit all fields and delete (with confirmation).
 
 ---
 
@@ -740,7 +751,7 @@ for each row execute function public.handle_new_user_profile();
 - `audit_log`: admin-only read; no direct client writes (functions/triggers only).
 
 Notes:
-- If you lock down `audit_log` inserts, `match_create`, `match_update`, and `match_void` must be security definer and must validate that the caller is a participant (or admin for voids).
+- If you lock down `audit_log` inserts, `match_create`, `match_update`, and `match_void` must be security definer and must validate that the caller is a participant (or admin for deletes).
 - Consider helper functions like `current_profile_id()` and `is_admin()` to keep RLS policies readable.
 - If you want to enforce RPC-only writes, drop the direct insert/update policies on `matches` and `games`.
 

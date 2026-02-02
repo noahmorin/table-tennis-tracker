@@ -5,6 +5,11 @@
       <p>Neutral, view-only stats for a single player.</p>
     </header>
 
+    <div class="card">
+      <p>Match history</p>
+      <router-link class="ghost-btn" :to="`/players/${$route.params.id}/matches`">Matches</router-link>
+    </div>
+
     <div class="card-grid">
       <article class="card">
         <h3>Overview</h3>

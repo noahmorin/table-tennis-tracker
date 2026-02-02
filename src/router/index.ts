@@ -12,6 +12,7 @@ const routes = [
   { path: '/submit-match', component: SubmitMatchPage, meta: { requiresAuth: true } },
   { path: '/leaderboard', component: LeaderboardPage, meta: { requiresAuth: true } },
   { path: '/players/:id', component: PlayerProfilePage, props: true, meta: { requiresAuth: true } },
+  { path: '/players/:id/matches', component: MyMatchesPage, props: true, meta: { requiresAuth: true } },
   { path: '/my-matches', component: MyMatchesPage, meta: { requiresAuth: true } }
 ];
 
@@ -35,6 +36,10 @@ router.beforeEach(async (to) => {
 
   if (!session.value || !profile.value) {
     return '/login';
+  }
+
+  if (to.path === '/my-matches') {
+    return `/players/${profile.value.id}/matches`;
   }
 
   return true;

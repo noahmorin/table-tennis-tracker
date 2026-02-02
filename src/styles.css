@@ -286,12 +286,20 @@ body {
   -webkit-appearance: none;
   -moz-appearance: none;
   appearance: none;
+}
+
+.field select:not([multiple]) {
   background-image:
     linear-gradient(45deg, transparent 50%, var(--select-arrow-color) 50%),
     linear-gradient(135deg, var(--select-arrow-color) 50%, transparent 50%);
   background-repeat: no-repeat;
   background-position: right 16px center, right 10px center;
   background-size: 6px 6px;
+}
+
+.field select[multiple] {
+  padding-right: var(--space-sm);
+  background-image: none;
 }
 
 .auth-page .field input,

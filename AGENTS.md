@@ -123,7 +123,7 @@ Avoid duplicating surfaces or turning stats pages into leaderboards.
 - `/submit-match`
 - `/leaderboard`
 - `/players/:id` (player profile + inspect stats)
-- `/my-matches`
+- `/players/:id/matches`
 
 UI expectation: mobile-first with bottom tab navigation.
 
@@ -132,13 +132,21 @@ UI expectation: mobile-first with bottom tab navigation.
 ## 9.1 Admin controls (inline)
 - Admin-only controls are inline on existing pages (hidden for non-admins).
 - No global admin mode, toggle, or banner.
-- Admins can create, edit, and void matches for any players.
+- Admins can create, edit, and delete matches for any players.
 - Inactive matches/games are hidden by default; admin views can include an optional "include inactive" filter.
 - Audit log remains database-only (no frontend surface).
 
 ---
 
-## 10. Match submission, edit, void
+## 9.2 My Matches Page (implementation)
+- Filters (modal): opponent, date range, optional sort order.
+- Admin-only: include inactive toggle.
+- Cards show date, format, players/opponent, and match score.
+- Edit modal uses the submit-match layout; non-admins can edit format/scores/notes, admins can edit all fields and delete (with confirmation).
+
+---
+
+## 10. Match submission, edit, delete
 Submission inputs:
 - Player 1
 - Player 2
@@ -161,15 +169,17 @@ Client-side validation:
 Editing rules:
 - Either participant may edit a match
 - Admins may edit any match
+- Non-admins can edit format, scores, and notes
+- Admins can edit players, match date, format, scores, and notes
 - Match ID remains constant
 - Derived cached fields recomputed
 - Audit log captures before/after
 
-Voiding rules:
+Delete (soft) rules:
 - Set `is_active = false`
 - No hard deletes
 - Excluded from stats/Elo by default
-- Admins may void any match
+- Admins may delete any match
 
 ---
 
@@ -276,7 +286,7 @@ Columns:
 - `id uuid pk`
 - `entity_type text not null` (e.g. `profile`, `match`, `game`, `competition`)
 - `entity_id uuid not null`
-- `action text not null` (e.g. `create`, `update`, `void`, `link_auth`)
+- `action text not null` (e.g. `create`, `update`, `delete`, `link_auth`)
 - `before_data jsonb null`
 - `after_data jsonb null`
 - `is_active boolean not null default true` (structural consistency only)
@@ -321,7 +331,7 @@ Behavior:
 - Updates `matches` cached fields + notes + updated pair.
 - Inserts `audit_log` row with action `update`, `before_data`, and `after_data` containing `notes` + `games`.
 
-### 12.3 `match_void(...) -> void`
+### 12.3 `match_void(...) -> void` (soft delete)
 Signature:
 - `(p_match_id uuid, p_updated_by uuid)`
 
@@ -329,7 +339,7 @@ Behavior:
 - Locks match row; captures `before` snapshot.
 - Sets `matches.is_active=false` with updated pair.
 - Sets active `games.is_active=false` with updated pair.
-- Inserts `audit_log` row with action `void` and `before_data`.
+- Inserts `audit_log` row with action `delete` and `before_data`.
 
 ---
 

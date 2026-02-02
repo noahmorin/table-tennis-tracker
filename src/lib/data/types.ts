@@ -96,6 +96,10 @@ export type UpdateMatchInput = {
   matchId: string;
   games: GameInput[];
   notes?: string | null;
+  matchDate?: string;
+  matchFormat?: MatchFormat;
+  player1Id?: string;
+  player2Id?: string;
 };
 
 export type DbResult<T> = {
