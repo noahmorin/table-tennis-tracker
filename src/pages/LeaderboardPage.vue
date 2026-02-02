@@ -6,6 +6,8 @@ import { listMatches } from '../lib/data/matches';
 import { listGamesByMatchIds } from '../lib/data/games';
 import { listProfiles } from '../lib/data/profiles';
 import type { MatchRow, GameRow, ProfileRow } from '../lib/data/types';
+import { buildMatchGameTotals, calculateEloRatings } from '../lib/elo';
+import { eloConfig } from '../config/eloConfig';
 import 'ag-grid-community/styles/ag-grid.css';
 import 'ag-grid-community/styles/ag-theme-quartz.css';
 
@@ -13,6 +15,7 @@ type LeaderRow = {
   id: string;
   name: string;
   rank: number;
+  elo: number;
   matchesPlayed: number;
   wins: number;
   losses: number;
@@ -33,13 +36,13 @@ const formatPlayerLabel = (player: ProfileRow) => {
 
 const buildLeaderboardRows = (profiles: ProfileRow[], matches: MatchRow[], games: GameRow[]) => {
   const statsByPlayer = new Map<string, LeaderRow>();
-  const matchMap = new Map<string, MatchRow>();
 
   profiles.forEach((player) => {
     statsByPlayer.set(player.id, {
       id: player.id,
       name: formatPlayerLabel(player),
       rank: 0,
+      elo: eloConfig.baseline,
       matchesPlayed: 0,
       wins: 0,
       losses: 0,
@@ -51,12 +54,12 @@ const buildLeaderboardRows = (profiles: ProfileRow[], matches: MatchRow[], games
   });
 
   matches.forEach((match) => {
-    matchMap.set(match.id, match);
     if (!statsByPlayer.has(match.player1_id)) {
       statsByPlayer.set(match.player1_id, {
         id: match.player1_id,
         name: 'Unknown player',
         rank: 0,
+        elo: eloConfig.baseline,
         matchesPlayed: 0,
         wins: 0,
         losses: 0,
@@ -71,6 +74,7 @@ const buildLeaderboardRows = (profiles: ProfileRow[], matches: MatchRow[], games
         id: match.player2_id,
         name: 'Unknown player',
         rank: 0,
+        elo: eloConfig.baseline,
         matchesPlayed: 0,
         wins: 0,
         losses: 0,
@@ -82,36 +86,7 @@ const buildLeaderboardRows = (profiles: ProfileRow[], matches: MatchRow[], games
     }
   });
 
-  const matchGameTotals = new Map<
-    string,
-    { p1Wins: number; p2Wins: number; p1Points: number; p2Points: number }
-  >();
-
-  games.forEach((game) => {
-    const match = matchMap.get(game.match_id);
-    if (!match) {
-      return;
-    }
-
-    const current =
-      matchGameTotals.get(match.id) ?? {
-        p1Wins: 0,
-        p2Wins: 0,
-        p1Points: 0,
-        p2Points: 0
-      };
-
-    current.p1Points += game.player1_score;
-    current.p2Points += game.player2_score;
-
-    if (game.player1_score > game.player2_score) {
-      current.p1Wins += 1;
-    } else if (game.player2_score > game.player1_score) {
-      current.p2Wins += 1;
-    }
-
-    matchGameTotals.set(match.id, current);
-  });
+  const matchGameTotals = buildMatchGameTotals(matches, games);
 
   matches.forEach((match) => {
     const totals = matchGameTotals.get(match.id);
@@ -145,12 +120,22 @@ const buildLeaderboardRows = (profiles: ProfileRow[], matches: MatchRow[], games
     }
   });
 
+  const eloByPlayer = calculateEloRatings(
+    matches,
+    matchGameTotals,
+    Array.from(statsByPlayer.keys())
+  );
+
   const list = Array.from(statsByPlayer.values()).map((row) => ({
     ...row,
-    setDiff: row.setWins - row.setLosses
+    setDiff: row.setWins - row.setLosses,
+    elo: eloByPlayer.get(row.id) ?? row.elo
   }));
 
   list.sort((a, b) => {
+    if (b.elo !== a.elo) {
+      return b.elo - a.elo;
+    }
     if (b.wins !== a.wins) {
       return b.wins - a.wins;
     }
@@ -246,6 +231,17 @@ const columnDefs = computed<ColDef[]>(() => [
     }
   },
   {
+    headerName: 'Elo',
+    field: 'elo',
+    colId: 'elo',
+    width: 74,
+    minWidth: 68,
+    maxWidth: 88,
+    cellClass: 'cell-center',
+    headerClass: 'cell-center',
+    valueFormatter: (params) => Math.round(params.value ?? 0).toString()
+  },
+  {
     headerName: 'Played',
     field: 'matchesPlayed',
     colId: 'played',
@@ -327,7 +323,7 @@ onMounted(() => {
   <section class="page">
     <header class="page-header">
       <h2>Leaderboard</h2>
-      <p>Rankings based on match results.</p>
+      <p>Rankings based on Elo ratings.</p>
     </header>
 
     <div v-if="loading" class="form-message">Loading leaderboard...</div>

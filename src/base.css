@@ -263,12 +263,6 @@
   :root[data-theme='light'],
   :root[data-theme='dark'] {
     --surface-input: color-mix(in srgb, var(--surface-card) 90%, var(--brand-primary) 10%);
-    --status-danger: color-mix(in srgb, #b7382d 70%, var(--brand-primary) 30%);
-    --status-danger-strong: color-mix(in srgb, #9e2f26 70%, var(--brand-primary) 30%);
-    --status-success: color-mix(in srgb, #1f7a4d 70%, var(--brand-primary) 30%);
-    --status-warning: color-mix(in srgb, #a36800 70%, var(--brand-primary) 30%);
-    --status-danger-border: color-mix(in srgb, var(--status-danger) 30%, transparent);
-    --status-danger-border-strong: color-mix(in srgb, var(--status-danger-strong) 45%, transparent);
     --select-arrow-color: color-mix(in srgb, var(--text-muted) 70%, var(--brand-primary) 30%);
   }
 }

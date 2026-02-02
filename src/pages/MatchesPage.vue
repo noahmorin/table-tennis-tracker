@@ -4,9 +4,10 @@ import { useRoute, useRouter } from 'vue-router';
 import { AgGridVue } from 'ag-grid-vue3';
 import type { ColDef, GridApi, GridOptions } from 'ag-grid-community';
 import { listMatches, updateMatch, voidMatch } from '../lib/data/matches';
-import { listGamesByMatchId } from '../lib/data/games';
+import { listGamesByMatchId, listGamesByMatchIds } from '../lib/data/games';
 import { listProfiles } from '../lib/data/profiles';
 import type { GameInput, MatchFormat, MatchRow, ProfileRow } from '../lib/data/types';
+import { buildMatchGameTotals, calculateEloDeltasForPlayer } from '../lib/elo';
 import { useAuth } from '../stores/auth';
 import 'ag-grid-community/styles/ag-grid.css';
 import 'ag-grid-community/styles/ag-theme-quartz.css';
@@ -62,6 +63,8 @@ const filterLosses = ref(true);
 const matches = ref<MatchRow[]>([]);
 const matchesLoading = ref(false);
 const matchesError = ref<string | null>(null);
+const eloDeltasByMatchId = ref<Map<string, number>>(new Map());
+const eloLoading = ref(false);
 
 const profiles = ref<ProfileRow[]>([]);
 const profilesLoading = ref(false);
@@ -256,6 +259,33 @@ const matchOutcome = (match: MatchRow) => {
   return match.winner_user_id === targetPlayerId.value ? 'Win' : 'Loss';
 };
 
+const matchEloDelta = (match: MatchRow) => eloDeltasByMatchId.value.get(match.id);
+
+const matchEloDeltaLabel = (match: MatchRow) => {
+  const delta = matchEloDelta(match);
+  if (delta === undefined) {
+    return null;
+  }
+  const rounded = Math.round(delta);
+  const sign = rounded > 0 ? '+' : '';
+  return `${sign}${rounded}`;
+};
+
+const matchEloDeltaClass = (match: MatchRow) => {
+  const delta = matchEloDelta(match);
+  if (delta === undefined) {
+    return '';
+  }
+  const rounded = Math.round(delta);
+  if (rounded > 0) {
+    return 'is-gain';
+  }
+  if (rounded < 0) {
+    return 'is-loss';
+  }
+  return 'is-flat';
+};
+
 const maxMatchDate = computed(() => todayString());
 const editSetCount = computed(() => setsByFormat[editMatchFormat.value]);
 const canEditPlayers = computed(() => isAdmin.value);
@@ -358,6 +388,40 @@ const loadMatches = async () => {
   }
 
   matchesLoading.value = false;
+  void loadEloDeltas();
+};
+
+const loadEloDeltas = async () => {
+  if (!targetPlayerId.value || eloLoading.value) {
+    return;
+  }
+
+  eloLoading.value = true;
+
+  const { data: allMatches, error: matchesError } = await listMatches({ includeInactive: false });
+  if (matchesError) {
+    eloDeltasByMatchId.value = new Map();
+    eloLoading.value = false;
+    return;
+  }
+
+  const matchIds = (allMatches ?? []).map((match) => match.id);
+  const { data: gamesData, error: gamesError } = await listGamesByMatchIds(matchIds, {
+    includeInactive: false
+  });
+  if (gamesError) {
+    eloDeltasByMatchId.value = new Map();
+    eloLoading.value = false;
+    return;
+  }
+
+  const totals = buildMatchGameTotals(allMatches ?? [], gamesData ?? []);
+  eloDeltasByMatchId.value = calculateEloDeltasForPlayer(
+    allMatches ?? [],
+    totals,
+    targetPlayerId.value
+  );
+  eloLoading.value = false;
 };
 
 const openMatchDialog = async (match: MatchRow) => {
@@ -790,9 +854,9 @@ onMounted(() => {
     <section class="page">
       <header class="page-header page-header--with-actions">
         <div>
-          <h2>Matches</h2>
-          <p v-if="targetPlayerLabel">Viewing matches for {{ targetPlayerLabel }}.</p>
-          <p v-else>Viewing match history.</p>
+          <h2 v-if="targetPlayerLabel">{{ targetPlayerLabel }}'s matches</h2>
+          <h2 v-else>Matches</h2>
+          <p v-if="!targetPlayerLabel">Viewing match history.</p>
         </div>
         <button class="ghost-btn" type="button" @click="openFilterDialog">Filters</button>
       </header>
@@ -815,13 +879,22 @@ onMounted(() => {
               <p class="match-card__detail">{{ matchFormatLabel(match.match_format) }}</p>
             </div>
           <div class="match-card__score">
-            <span
-              v-if="matchOutcome(match)"
-              class="match-card__outcome"
-              :class="matchOutcome(match) === 'Win' ? 'is-win' : 'is-loss'"
-            >
-              {{ matchOutcome(match) }}
-            </span>
+            <div class="match-card__pills">
+              <span
+                v-if="matchEloDeltaLabel(match) !== null"
+                class="match-card__elo"
+                :class="matchEloDeltaClass(match)"
+              >
+                Elo {{ matchEloDeltaLabel(match) }}
+              </span>
+              <span
+                v-if="matchOutcome(match)"
+                class="match-card__outcome"
+                :class="matchOutcome(match) === 'Win' ? 'is-win' : 'is-loss'"
+              >
+                {{ matchOutcome(match) }}
+              </span>
+            </div>
             <span class="match-card__result">{{ matchScoreLabel(match) }}</span>
             <span class="match-card__format">{{ matchFormatLabel(match.match_format) }}</span>
           </div>
@@ -1149,13 +1222,22 @@ onMounted(() => {
 
 .match-card__score {
   text-align: right;
-  display: grid;
+  display: flex;
+  flex-direction: column;
   gap: 4px;
-  align-content: start;
+  align-items: flex-end;
+}
+
+.match-card__pills {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  justify-content: space-between;
+  align-items: center;
+  width: 100%;
 }
 
 .match-card__outcome {
-  justify-self: end;
   font-size: 11px;
   text-transform: uppercase;
   letter-spacing: 0.1em;
@@ -1188,6 +1270,34 @@ onMounted(() => {
   text-transform: uppercase;
   letter-spacing: 0.08em;
   color: var(--text-muted);
+}
+
+.match-card__elo {
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  font-weight: 700;
+  padding: 4px 8px;
+  border-radius: var(--radius-pill);
+  border: 1px solid transparent;
+}
+
+.match-card__elo.is-gain {
+  color: var(--status-success);
+  background: var(--status-success-bg);
+  border-color: var(--status-success-border);
+}
+
+.match-card__elo.is-loss {
+  color: var(--status-danger);
+  background: var(--status-danger-bg);
+  border-color: var(--status-danger-border);
+}
+
+.match-card__elo.is-flat {
+  color: var(--text-muted);
+  background: var(--surface-input);
+  border-color: var(--border-subtle);
 }
 
 .match-card__actions {
