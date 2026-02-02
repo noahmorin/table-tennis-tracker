@@ -19,6 +19,7 @@ type LeaderRow = {
   matchesPlayed: number;
   wins: number;
   losses: number;
+  winPct: number;
   setWins: number;
   setLosses: number;
   setDiff: number;
@@ -28,6 +29,7 @@ type LeaderRow = {
 const loading = ref(false);
 const error = ref<string | null>(null);
 const rows = ref<LeaderRow[]>([]);
+const searchTerm = ref('');
 
 const formatPlayerLabel = (player: ProfileRow) => {
   const base = player.display_name?.trim() || player.username;
@@ -46,6 +48,7 @@ const buildLeaderboardRows = (profiles: ProfileRow[], matches: MatchRow[], games
       matchesPlayed: 0,
       wins: 0,
       losses: 0,
+      winPct: 0,
       setWins: 0,
       setLosses: 0,
       setDiff: 0,
@@ -63,6 +66,7 @@ const buildLeaderboardRows = (profiles: ProfileRow[], matches: MatchRow[], games
         matchesPlayed: 0,
         wins: 0,
         losses: 0,
+        winPct: 0,
         setWins: 0,
         setLosses: 0,
         setDiff: 0,
@@ -78,6 +82,7 @@ const buildLeaderboardRows = (profiles: ProfileRow[], matches: MatchRow[], games
         matchesPlayed: 0,
         wins: 0,
         losses: 0,
+        winPct: 0,
         setWins: 0,
         setLosses: 0,
         setDiff: 0,
@@ -129,6 +134,7 @@ const buildLeaderboardRows = (profiles: ProfileRow[], matches: MatchRow[], games
   const list = Array.from(statsByPlayer.values()).map((row) => ({
     ...row,
     setDiff: row.setWins - row.setLosses,
+    winPct: row.matchesPlayed > 0 ? row.wins / row.matchesPlayed : 0,
     elo: eloByPlayer.get(row.id) ?? row.elo
   }));
 
@@ -154,6 +160,14 @@ const buildLeaderboardRows = (profiles: ProfileRow[], matches: MatchRow[], games
 
   return list;
 };
+
+const filteredRows = computed(() => {
+  const term = searchTerm.value.trim().toLowerCase();
+  if (!term) {
+    return rows.value;
+  }
+  return rows.value.filter((row) => row.name.toLowerCase().includes(term));
+});
 
 const loadLeaderboard = async () => {
   loading.value = true;
@@ -242,16 +256,6 @@ const columnDefs = computed<ColDef[]>(() => [
     valueFormatter: (params) => Math.round(params.value ?? 0).toString()
   },
   {
-    headerName: 'Played',
-    field: 'matchesPlayed',
-    colId: 'played',
-    width: 72,
-    minWidth: 64,
-    maxWidth: 80,
-    cellClass: 'cell-center',
-    headerClass: 'cell-center'
-  },
-  {
     headerName: 'Record',
     field: 'wins',
     colId: 'record',
@@ -271,6 +275,34 @@ const columnDefs = computed<ColDef[]>(() => [
       const lossesB = nodeB?.data?.losses ?? 0;
       return lossesB - lossesA;
     }
+  },
+  {
+    headerName: 'Win %',
+    field: 'winPct',
+    colId: 'winPct',
+    width: 76,
+    minWidth: 68,
+    maxWidth: 86,
+    cellClass: 'cell-center',
+    headerClass: 'cell-center',
+    valueFormatter: (params) => {
+      const played = params.data?.matchesPlayed ?? 0;
+      if (!played) {
+        return '-';
+      }
+      const value = params.value ?? 0;
+      return `${(value * 100).toFixed(1)}%`;
+    }
+  },
+  {
+    headerName: 'Played',
+    field: 'matchesPlayed',
+    colId: 'played',
+    width: 72,
+    minWidth: 64,
+    maxWidth: 80,
+    cellClass: 'cell-center',
+    headerClass: 'cell-center'
   },
   {
     headerName: 'Set W',
@@ -326,6 +358,16 @@ onMounted(() => {
       <p>Rankings based on Elo ratings.</p>
     </header>
 
+    <div class="leaderboard-controls">
+      <input
+        v-model="searchTerm"
+        class="leaderboard-search"
+        type="search"
+        placeholder="Search by name"
+        aria-label="Search leaderboard by name"
+      />
+    </div>
+
     <div v-if="loading" class="form-message">Loading leaderboard...</div>
     <div v-else-if="error" class="form-message is-error">{{ error }}</div>
 
@@ -334,7 +376,7 @@ onMounted(() => {
         class="ag-theme-quartz leaderboard-grid__table"
         :grid-options="gridOptions"
         :column-defs="columnDefs"
-        :row-data="rows"
+        :row-data="filteredRows"
         :default-col-def="defaultColDef"
         :row-selection="'none'"
         :dom-layout="'autoHeight'"
@@ -348,6 +390,21 @@ onMounted(() => {
 <style scoped>
 .leaderboard-grid {
   width: 100%;
+}
+
+.leaderboard-controls {
+  display: flex;
+  width: 100%;
+}
+
+.leaderboard-search {
+  width: 100%;
+  border-radius: var(--radius-control);
+  border: 1px solid var(--border-subtle);
+  padding: var(--space-xs) var(--space-sm);
+  font-size: 14px;
+  font-family: 'Space Grotesk', sans-serif;
+  background: var(--surface-input);
 }
 
 .leaderboard-grid__table {
