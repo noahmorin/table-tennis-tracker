@@ -1,82 +1,81 @@
-# Table Tennis Tracker
+﻿# Table Tennis Tracker
 
-A lightweight, mobile-first web app for tracking ranked table tennis matches within a single office environment.
+A lightweight, mobile-first web app for tracking ranked table tennis matches in a single office or small league.
 
-The app focuses on **simplicity, correctness, transparency, and zero-cost hosting**, while remaining flexible enough to support Elo ratings, detailed statistics, and future tournament modes.
-
----
-
-## Purpose
-
-Table Tennis Tracker is designed to:
-
-- Record completed, ranked table tennis matches
-- Maintain a complete and auditable match record log
-- Compute Elo ratings and player statistics deterministically
-- Provide clear leaderboards and player profiles
-- Support low-friction match submission and correction
-
-The app is intended for **trusted users** in a small, internal league (e.g. an office).
+This README is written for someone who wants to use the app or quickly understand what it does.
 
 ---
 
-## Core Features
+## What this app is for
 
-- Ranked match tracking (best-of formats)
-- Game-level score recording
-- Client-side Elo computation
-- Leaderboards with filtering
-- Player profiles and match records
-- Detailed personal statistics dashboard
-- View-only inspection of other players’ stats
-- Soft-delete and audit logging for corrections
-- Admin controls for league-wide edits and voids
+- Record completed matches between two players
+- Keep a clean, auditable history of results
+- Show a leaderboard and player profiles
+- Compute Elo ratings and stats consistently
+- Allow quick corrections without deleting history
+
+The app assumes a small, trusted group of users and favors clarity over heavy security or complex workflows.
 
 ---
 
-## Tech Stack
+## What you can do
 
-### Frontend
+- Submit a match (best-of formats) with per-game scores
+- See a leaderboard of active players
+- Open a player profile to view match history and stats
+- View your own stats dashboard
+- Edit a match you participated in
+- Admins can create, edit, or void any match
+
+---
+
+## How it works
+
+- A match is one record shared by both players.
+- Each match has one or more games with raw scores.
+- All stats and Elo are derived from active match records.
+- Matches are never hard-deleted. They can be marked inactive for auditability.
+- Edits create an audit trail so changes are transparent.
+
+---
+
+## Pages you will see
+
+- Login
+- Submit Match
+- Leaderboard
+- Player Profile (stats + overview)
+- Player Matches
+
+Navigation is mobile-first and optimized for quick use during a match.
+
+---
+
+## Tech stack
+
+Frontend:
 - Vue 3
 - TypeScript
 - Vite
-- Mobile-first web app
 - Hosted on GitHub Pages
 
-### Backend / Data
-- Supabase
-  - PostgreSQL (free tier)
-  - Supabase Auth (email + password, email confirmation disabled)
-  - Profiles are created on signup via a DB trigger (using auth metadata)
-- No custom backend services
-- Frontend communicates directly with Supabase via SDK
+Backend / Data:
+- Supabase (PostgreSQL + Supabase Auth)
+- No custom backend servers
+- Frontend talks directly to Supabase via the SDK
 
 ---
 
-## Design Principles
+## What this app does not try to do
 
-- Matches are the source of truth
-- All stats and Elo are derived from match records
-- No pre-aggregated statistics or stored ratings
-- Prefer recomputation over storage
-- Prefer correction over deletion
-- Minimal security assumptions (trusted users)
-- No premature optimization
-
----
-
-## Intended Use Case
-
-- Single office or small internal league
-- No public access
+- No anti-cheat or moderation system
 - No real-time scoring
-- No offline support
-- No large-scale performance requirements
+- No offline mode
+- No scheduling or fixtures
+- Not built for large public leagues
 
 ---
 
 ## Status
 
-This project is an internal tool and is intentionally scoped to remain simple, transparent, and maintainable.
-
-Future features (such as tournaments or advanced analytics) are additive and not required for core functionality.
+This project is intentionally small and focused. New features should keep the app simple, correct, and easy to audit.

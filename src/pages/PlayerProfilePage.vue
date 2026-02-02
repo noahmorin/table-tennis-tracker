@@ -9,6 +9,7 @@ import { buildMatchGameTotals, calculateEloDeltasForPlayer, calculateEloRatings 
 import { eloConfig } from '../config/eloConfig';
 
 type TabId = 'overview' | 'matches' | 'elo' | 'streaks' | 'points';
+type DateFilterOption = 'all' | '30' | '60' | '90';
 
 type OpponentSummary = {
   id: string;
@@ -50,6 +51,7 @@ const tabs: Array<{ id: TabId; label: string }> = [
 ];
 
 const activeTab = ref<TabId>('overview');
+const dateFilter = ref<DateFilterOption>('all');
 
 const loading = ref(false);
 const error = ref<string | null>(null);
@@ -97,6 +99,24 @@ const compareMatches = (a: MatchRow, b: MatchRow) => {
   return a.id < b.id ? -1 : 1;
 };
 
+const formatDateInput = (value: Date) => {
+  const year = value.getFullYear();
+  const month = String(value.getMonth() + 1).padStart(2, '0');
+  const day = String(value.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
+};
+
+const dateRange = computed(() => {
+  if (dateFilter.value === 'all') {
+    return { from: null as string | null, to: null as string | null };
+  }
+  const days = Number(dateFilter.value);
+  const today = new Date();
+  const fromDate = new Date();
+  fromDate.setDate(today.getDate() - days);
+  return { from: formatDateInput(fromDate), to: formatDateInput(today) };
+});
+
 const formatDate = (value: string) => {
   if (!value) {
     return '';
@@ -130,6 +150,27 @@ const formatPct = (value: number, total: number) => {
   }
   return `${(value * 100).toFixed(1)}%`;
 };
+
+const dateRangeLabel = computed(() => {
+  if (dateFilter.value === 'all') {
+    return 'All time';
+  }
+  const range = dateRange.value;
+  if (!range.from || !range.to) {
+    return 'All time';
+  }
+  return `${formatDate(range.from)} - ${formatDate(range.to)}`;
+});
+
+const filteredMatches = computed(() => {
+  const range = dateRange.value;
+  if (!range.from || !range.to) {
+    return matches.value;
+  }
+  return matches.value.filter(
+    (match) => match.match_date >= range.from! && match.match_date <= range.to!
+  );
+});
 
 const stats = computed(() => {
   const targetId = targetPlayerId.value;
@@ -171,10 +212,11 @@ const stats = computed(() => {
     };
   }
 
-  const totalsByMatch = buildMatchGameTotals(matches.value, games.value);
+  const matchList = filteredMatches.value;
+  const totalsByMatch = buildMatchGameTotals(matchList, games.value);
   const seededPlayerIds = profiles.value.map((player) => player.id);
-  const eloByPlayer = calculateEloRatings(matches.value, totalsByMatch, seededPlayerIds);
-  const targetMatches = matches.value.filter(
+  const eloByPlayer = calculateEloRatings(matchList, totalsByMatch, seededPlayerIds);
+  const targetMatches = matchList.filter(
     (match) => match.player1_id === targetId || match.player2_id === targetId
   );
   const orderedTargetMatches = [...targetMatches].sort(compareMatches);
@@ -356,10 +398,10 @@ const stats = computed(() => {
     return worst;
   }, null);
 
-  const deltas = calculateEloDeltasForPlayer(matches.value, totalsByMatch, targetId);
+  const deltas = calculateEloDeltasForPlayer(matchList, totalsByMatch, targetId);
   let rating = eloConfig.baseline;
   const eloSeries: EloPoint[] = [];
-  const orderedAllMatches = [...matches.value].sort(compareMatches);
+  const orderedAllMatches = [...matchList].sort(compareMatches);
 
   orderedAllMatches.forEach((match) => {
     const delta = deltas.get(match.id);
@@ -794,6 +836,18 @@ watch(
       </router-link>
     </header>
 
+    <div class="profile-filters">
+      <label class="field">
+        <span>Stats range</span>
+        <select v-model="dateFilter">
+          <option value="all">All time</option>
+          <option value="30">Last 30 days</option>
+          <option value="60">Last 60 days</option>
+          <option value="90">Last 90 days</option>
+        </select>
+      </label>
+    </div>
+
     <div v-if="loading" class="form-message">Loading profile...</div>
     <div v-else-if="error" class="form-message is-error">{{ error }}</div>
 
@@ -1005,6 +1059,17 @@ watch(
   flex-direction: column;
   align-items: flex-start;
   gap: var(--space-sm);
+}
+
+.profile-filters {
+  display: grid;
+  gap: var(--space-xs);
+  max-width: 240px;
+}
+
+.profile-filters__hint {
+  font-size: 12px;
+  color: var(--text-muted);
 }
 
 .profile-username {
