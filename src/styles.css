@@ -468,6 +468,10 @@ body {
   color: var(--text-muted);
 }
 
+.theme-dialog__version {
+  justify-self: center;
+}
+
 .theme-dialog__options {
   display: grid;
   gap: var(--space-sm);

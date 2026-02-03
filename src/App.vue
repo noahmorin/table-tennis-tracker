@@ -98,6 +98,8 @@ const handleSignOut = async () => {
   router.replace('/login');
 };
 
+const appVersion = __APP_VERSION__;
+
 onMounted(() => {
   syncFromStorageOrSystem();
 });
@@ -184,6 +186,8 @@ onMounted(() => {
           Sign Out
         </button>
       </div>
+
+      <p class="theme-dialog__hint theme-dialog__version">Version {{ appVersion }}</p>
     </form>
   </dialog>
 </template>

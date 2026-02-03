@@ -1,6 +1,6 @@
 # Table Tennis Tracker App - Codex Agent Plan
 
-Last updated: 2026-02-01
+Last updated: 2026-02-03
 
 This file is the single, authoritative context pack for in-repo Codex/VSCode agents.
 Use it as the default reference for code, schema, and UI decisions.
@@ -379,6 +379,17 @@ Apply `supabase/rls-rpc-only.sql` to enforce RPC-only writes on `matches` and `g
 
 ### 14.5 Mobile-first UX
 - Default to compact layouts, collapsible sections, and minimal navigation loops.
+
+### 14.6 App Versioning (deploy visibility)
+- `package.json` `version` is the source of truth for the deployed app version.
+- The version is displayed in the settings modal (theme dialog) so users can report/confirm what build is deployed.
+  - Build-time injection: `vite.config.ts` defines `__APP_VERSION__` from `package.json`.
+  - UI surface: `src/App.vue` renders `Version {{ __APP_VERSION__ }}` in the settings modal.
+- Bump version occasionally as changes land (use judgment):
+  - Small change (copy tweaks, minor UI/logic fix): bump patch: `1.0.x`
+  - Medium change (refactor within a section, significant additions to an existing module): bump minor: `1.x.0`
+  - Large change (new major section, broad refactor across the app): bump major: `x.0.0`
+- Ask for confirmation before any major (`x.0.0`) version jump.
 
 ---
 
