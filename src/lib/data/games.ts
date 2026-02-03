@@ -3,7 +3,7 @@ import { mapDbError } from './errors';
 import type { DbResult, GameRow } from './types';
 
 const gameSelect =
-  'id, match_id, game_number, player1_score, player2_score, is_active, created_at, created_by, updated_at, updated_by';
+  'id, match_id, game_number, side_a_score, side_b_score, is_active, created_at, created_by, updated_at, updated_by';
 
 export const listGamesByMatchId = async (
   matchId: string,

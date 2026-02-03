@@ -4,7 +4,7 @@ import { AgGridVue } from 'ag-grid-vue3';
 import type { ColDef, CellValueChangedEvent, GridApi, GridOptions, GridReadyEvent } from 'ag-grid-community';
 import { listProfiles } from '../lib/data/profiles';
 import { createMatch } from '../lib/data/matches';
-import type { GameInput, MatchFormat, ProfileRow } from '../lib/data/types';
+import type { CompetitionType, GameInput, MatchFormat, MatchType, ProfileRow } from '../lib/data/types';
 import { useAuth } from '../stores/auth';
 import 'ag-grid-community/styles/ag-grid.css';
 import 'ag-grid-community/styles/ag-theme-quartz.css';
@@ -19,11 +19,15 @@ const todayString = () => {
   return `${year}-${month}-${day}`;
 };
 
+const matchType = ref<MatchType>('doubles');
 const matchDate = ref(todayString());
 const matchFormat = ref<MatchFormat>('bo3');
+const competitionType = ref<CompetitionType>('ranked');
 const notes = ref('');
-const player1Id = ref('');
-const player2Id = ref('');
+const teamAPlayer1Id = ref('');
+const teamAPlayer2Id = ref('');
+const teamBPlayer1Id = ref('');
+const teamBPlayer2Id = ref('');
 
 const players = ref<ProfileRow[]>([]);
 const playersLoading = ref(false);
@@ -38,14 +42,14 @@ const gridApi = ref<GridApi | null>(null);
 
 type GameRow = {
   gameNumber: number;
-  player1Score: number | string | null;
-  player2Score: number | string | null;
+  sideAScore: number | string | null;
+  sideBScore: number | string | null;
 };
 
 const buildGameRow = (gameNumber: number): GameRow => ({
   gameNumber,
-  player1Score: null,
-  player2Score: null
+  sideAScore: null,
+  sideBScore: null
 });
 
 const rowData = ref<GameRow[]>([]);
@@ -99,44 +103,48 @@ const playerLabelForId = (id: string) => {
   return player ? formatPlayerLabel(player) : '';
 };
 
-const filterPlayers = (query: string, excludeId?: string) => {
-  const normalized = query.trim().toLowerCase();
-  return players.value.filter((player) => {
-    if (excludeId && player.id === excludeId) {
-      return false;
-    }
-    if (!normalized) {
-      return true;
-    }
-    return (
-      player.display_name?.toLowerCase().includes(normalized) ||
-      player.username.toLowerCase().includes(normalized)
-    );
-  });
-};
+const isDoubles = computed(() => matchType.value === 'doubles');
 
-
-const player1Label = computed(() => {
-  if (!player1Id.value) {
-    return 'Player 1';
+const teamAIds = computed(() => {
+  const ids = [teamAPlayer1Id.value];
+  if (isDoubles.value) {
+    ids.push(teamAPlayer2Id.value);
   }
-  return playerLabelForId(player1Id.value) || 'Player 1';
+  return ids.filter(Boolean);
 });
 
-const player2Label = computed(() => {
-  if (!player2Id.value) {
-    return 'Player 2';
+const teamBIds = computed(() => {
+  const ids = [teamBPlayer1Id.value];
+  if (isDoubles.value) {
+    ids.push(teamBPlayer2Id.value);
   }
-  return playerLabelForId(player2Id.value) || 'Player 2';
+  return ids.filter(Boolean);
 });
 
-const player1Options = computed(() => filterPlayers('', player2Id.value));
-const player2Options = computed(() => filterPlayers('', player1Id.value));
+const teamALabel = computed(() => {
+  const labels = teamAIds.value.map((id) => playerLabelForId(id)).filter(Boolean);
+  return labels.length ? `Team A: ${labels.join(' & ')}` : 'Team A';
+});
+
+const teamBLabel = computed(() => {
+  const labels = teamBIds.value.map((id) => playerLabelForId(id)).filter(Boolean);
+  return labels.length ? `Team B: ${labels.join(' & ')}` : 'Team B';
+});
+
+const selectedIds = computed(() => new Set([...teamAIds.value, ...teamBIds.value].filter(Boolean)));
+
+const buildPlayerOptions = (currentId: string) =>
+  players.value.filter((player) => player.id === currentId || !selectedIds.value.has(player.id));
+
+const teamAPlayer1Options = computed(() => buildPlayerOptions(teamAPlayer1Id.value));
+const teamAPlayer2Options = computed(() => buildPlayerOptions(teamAPlayer2Id.value));
+const teamBPlayer1Options = computed(() => buildPlayerOptions(teamBPlayer1Id.value));
+const teamBPlayer2Options = computed(() => buildPlayerOptions(teamBPlayer2Id.value));
 
 const clearScores = () => {
   rowData.value.forEach((row) => {
-    row.player1Score = null;
-    row.player2Score = null;
+    row.sideAScore = null;
+    row.sideBScore = null;
   });
 };
 
@@ -148,15 +156,18 @@ const resetMessages = () => {
 };
 
 const resetForm = () => {
+  matchType.value = 'doubles';
   matchDate.value = todayString();
   matchFormat.value = 'bo3';
   syncGameRows(gamesByFormat.bo3);
   notes.value = '';
-  player2Id.value = '';
+  teamAPlayer2Id.value = '';
+  teamBPlayer1Id.value = '';
+  teamBPlayer2Id.value = '';
   if (isAdmin.value) {
-    player1Id.value = '';
+    teamAPlayer1Id.value = '';
   } else if (profile.value?.id) {
-    player1Id.value = profile.value.id;
+    teamAPlayer1Id.value = profile.value.id;
   }
   clearScores();
   resetMessages();
@@ -205,20 +216,34 @@ const validateMatch = () => {
     errors.push('Match date cannot be in the future.');
   }
 
-  if (!player1Id.value) {
-    errors.push('Player 1 is required.');
+  if (!teamAPlayer1Id.value) {
+    errors.push('Team A player 1 is required.');
   }
 
-  if (!player2Id.value) {
-    errors.push('Player 2 is required.');
+  if (isDoubles.value && !teamAPlayer2Id.value) {
+    errors.push('Team A player 2 is required.');
   }
 
-  if (player1Id.value && player2Id.value && player1Id.value === player2Id.value) {
-    errors.push('Player 1 and Player 2 must be different.');
+  if (!teamBPlayer1Id.value) {
+    errors.push('Team B player 1 is required.');
   }
 
-  if (!isAdmin.value && profile.value?.id && player1Id.value !== profile.value.id) {
-    errors.push('Player 1 must be your profile.');
+  if (isDoubles.value && !teamBPlayer2Id.value) {
+    errors.push('Team B player 2 is required.');
+  }
+
+  const selectedPlayers = [
+    teamAPlayer1Id.value,
+    isDoubles.value ? teamAPlayer2Id.value : '',
+    teamBPlayer1Id.value,
+    isDoubles.value ? teamBPlayer2Id.value : ''
+  ].filter(Boolean);
+  if (selectedPlayers.length !== new Set(selectedPlayers).size) {
+    errors.push('Players must be unique across both teams.');
+  }
+
+  if (!isAdmin.value && profile.value?.id && teamAPlayer1Id.value !== profile.value.id) {
+    errors.push('Team A player 1 must be your profile.');
   }
 
   let wins1 = 0;
@@ -228,10 +253,10 @@ const validateMatch = () => {
 
   for (let i = 1; i <= gameCount.value; i += 1) {
     const row = rowData.value[i - 1] ?? buildGameRow(i);
-    const score1 = parseScore(row.player1Score);
-    const score2 = parseScore(row.player2Score);
-    const cellKey1 = `game${i}:player1Score`;
-    const cellKey2 = `game${i}:player2Score`;
+    const score1 = parseScore(row.sideAScore);
+    const score2 = parseScore(row.sideBScore);
+    const cellKey1 = `game${i}:sideAScore`;
+    const cellKey2 = `game${i}:sideBScore`;
 
     const score1Empty = score1 === null;
     const score2Empty = score2 === null;
@@ -317,8 +342,8 @@ const validateMatch = () => {
 
     games.push({
       game_number: i,
-      player1_score: score1,
-      player2_score: score2
+      side_a_score: score1,
+      side_b_score: score2
     });
 
     if (score1 > score2) {
@@ -368,10 +393,17 @@ const handleSubmit = async () => {
 
   submitting.value = true;
   const { error } = await createMatch({
-    player1Id: player1Id.value,
-    player2Id: player2Id.value,
+    matchType: matchType.value,
     matchDate: matchDate.value,
     matchFormat: matchFormat.value,
+    competitionType: competitionType.value,
+    competitionId: null,
+    teamA: isDoubles.value
+      ? [teamAPlayer1Id.value, teamAPlayer2Id.value]
+      : [teamAPlayer1Id.value],
+    teamB: isDoubles.value
+      ? [teamBPlayer1Id.value, teamBPlayer2Id.value]
+      : [teamBPlayer1Id.value],
     games,
     notes: notes.value.trim() ? notes.value.trim() : null
   });
@@ -406,8 +438,8 @@ const columnDefs = computed<ColDef[]>(() => [
     valueGetter: (params) => (params.data ? `Game ${params.data.gameNumber}` : '')
   },
   {
-    headerName: player1Label.value,
-    field: 'player1Score',
+    headerName: teamALabel.value,
+    field: 'sideAScore',
     editable: true,
     minWidth: 120,
     flex: 1,
@@ -415,11 +447,11 @@ const columnDefs = computed<ColDef[]>(() => [
     valueSetter: (params) => {
       const raw = String(params.newValue ?? '').trim();
       if (raw === '') {
-        params.data.player1Score = null;
+        params.data.sideAScore = null;
         return true;
       }
       const parsed = Number(raw);
-      params.data.player1Score = Number.isFinite(parsed) ? Math.floor(parsed) : raw;
+      params.data.sideAScore = Number.isFinite(parsed) ? Math.floor(parsed) : raw;
       return true;
     },
     cellClassRules: {
@@ -428,14 +460,14 @@ const columnDefs = computed<ColDef[]>(() => [
         if (!gameNumber) {
           return false;
         }
-        const key = `game${gameNumber}:player1Score`;
+        const key = `game${gameNumber}:sideAScore`;
         return Boolean(cellErrors.value[key]);
       }
     }
   },
   {
-    headerName: player2Label.value,
-    field: 'player2Score',
+    headerName: teamBLabel.value,
+    field: 'sideBScore',
     editable: true,
     minWidth: 120,
     flex: 1,
@@ -443,11 +475,11 @@ const columnDefs = computed<ColDef[]>(() => [
     valueSetter: (params) => {
       const raw = String(params.newValue ?? '').trim();
       if (raw === '') {
-        params.data.player2Score = null;
+        params.data.sideBScore = null;
         return true;
       }
       const parsed = Number(raw);
-      params.data.player2Score = Number.isFinite(parsed) ? Math.floor(parsed) : raw;
+      params.data.sideBScore = Number.isFinite(parsed) ? Math.floor(parsed) : raw;
       return true;
     },
     cellClassRules: {
@@ -456,7 +488,7 @@ const columnDefs = computed<ColDef[]>(() => [
         if (!gameNumber) {
           return false;
         }
-        const key = `game${gameNumber}:player2Score`;
+        const key = `game${gameNumber}:sideBScore`;
         return Boolean(cellErrors.value[key]);
       }
     }
@@ -470,7 +502,15 @@ const defaultColDef: ColDef = {
   suppressSizeToFit: true
 };
 
-watch([player1Id, player2Id], () => {
+watch([teamAPlayer1Id, teamAPlayer2Id, teamBPlayer1Id, teamBPlayer2Id], () => {
+  gridApi.value?.refreshHeader();
+});
+
+watch(matchType, (next) => {
+  if (next === 'singles') {
+    teamAPlayer2Id.value = '';
+    teamBPlayer2Id.value = '';
+  }
   gridApi.value?.refreshHeader();
 });
 
@@ -485,14 +525,14 @@ watch(matchFormat, (next) => {
 
 watch([profile, isAdmin], () => {
   if (!isAdmin.value && profile.value?.id) {
-    player1Id.value = profile.value.id;
+    teamAPlayer1Id.value = profile.value.id;
   }
   loadPlayers();
 });
 
 onMounted(() => {
   if (!isAdmin.value && profile.value?.id) {
-    player1Id.value = profile.value.id;
+    teamAPlayer1Id.value = profile.value.id;
   }
   loadPlayers();
 });
@@ -505,28 +545,75 @@ onMounted(() => {
     </header>
 
     <form class="form-card" @submit.prevent="handleSubmit">
+      <div class="mode-toggle auth-toggle" role="tablist" aria-label="Match type">
+        <button
+          type="button"
+          class="auth-toggle__btn"
+          :class="{ 'is-active': matchType === 'doubles' }"
+          role="tab"
+          :aria-selected="matchType === 'doubles'"
+          @click="matchType = 'doubles'"
+        >
+          Doubles
+        </button>
+        <button
+          type="button"
+          class="auth-toggle__btn"
+          :class="{ 'is-active': matchType === 'singles' }"
+          role="tab"
+          :aria-selected="matchType === 'singles'"
+          @click="matchType = 'singles'"
+        >
+          Singles
+        </button>
+      </div>
+
       <div class="matchup-row">
-        <label class="field matchup-field">
-          <span>Player 1</span>
-          <select v-model="player1Id" :disabled="!isAdmin || playersLoading">
-            <option value="" disabled>Select player 1</option>
-            <option v-for="player in player1Options" :key="player.id" :value="player.id">
-              {{ formatPlayerLabel(player) }}
-            </option>
-          </select>
-        </label>
+        <div class="team-stack">
+          <label class="field matchup-field">
+            <span>Team A - Player 1</span>
+            <select v-model="teamAPlayer1Id" :disabled="!isAdmin || playersLoading">
+              <option value="" disabled>Select player</option>
+              <option v-for="player in teamAPlayer1Options" :key="player.id" :value="player.id">
+                {{ formatPlayerLabel(player) }}
+              </option>
+            </select>
+          </label>
+
+          <label v-if="isDoubles" class="field matchup-field">
+            <span>Team A - Player 2</span>
+            <select v-model="teamAPlayer2Id" :disabled="playersLoading">
+              <option value="" disabled>Select player</option>
+              <option v-for="player in teamAPlayer2Options" :key="player.id" :value="player.id">
+                {{ formatPlayerLabel(player) }}
+              </option>
+            </select>
+          </label>
+        </div>
 
         <span class="matchup-vs">vs.</span>
 
-        <label class="field matchup-field">
-          <span>Player 2</span>
-          <select v-model="player2Id" :disabled="playersLoading">
-            <option value="" disabled>Select player 2</option>
-            <option v-for="player in player2Options" :key="player.id" :value="player.id">
-              {{ formatPlayerLabel(player) }}
-            </option>
-          </select>
-        </label>
+        <div class="team-stack">
+          <label class="field matchup-field">
+            <span>Team B - Player 1</span>
+            <select v-model="teamBPlayer1Id" :disabled="playersLoading">
+              <option value="" disabled>Select player</option>
+              <option v-for="player in teamBPlayer1Options" :key="player.id" :value="player.id">
+                {{ formatPlayerLabel(player) }}
+              </option>
+            </select>
+          </label>
+
+          <label v-if="isDoubles" class="field matchup-field">
+            <span>Team B - Player 2</span>
+            <select v-model="teamBPlayer2Id" :disabled="playersLoading">
+              <option value="" disabled>Select player</option>
+              <option v-for="player in teamBPlayer2Options" :key="player.id" :value="player.id">
+                {{ formatPlayerLabel(player) }}
+              </option>
+            </select>
+          </label>
+        </div>
       </div>
 
       <div class="field-row field-row--inline">
@@ -602,6 +689,12 @@ onMounted(() => {
   --radius-pill: 12px;
 }
 
+.form-card {
+  width: 100%;
+  max-width: 720px;
+  margin: 0 auto;
+}
+
 .score-grid-wrapper {
   overflow-y: auto;
   overflow-x: hidden;
@@ -614,7 +707,6 @@ onMounted(() => {
   grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
   align-items: end;
   gap: var(--space-sm);
-  margin-bottom: var(--space-md);
 }
 
 .matchup-vs {
@@ -632,6 +724,7 @@ onMounted(() => {
   text-overflow: ellipsis;
   padding-left: var(--space-sm);
   padding-right: calc(var(--space-sm) + 20px);
+  margin-bottom: var(--space-md);
   font-size: 13px;
 }
 

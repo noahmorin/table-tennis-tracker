@@ -9,7 +9,7 @@ import type {
 import { useAuth } from '../../stores/auth';
 
 const matchSelect =
-  'id, player1_id, player2_id, winner_user_id, loser_user_id, player1_games_won, player2_games_won, match_format, match_date, competition_type, competition_id, notes, is_active, created_at, created_by, updated_at, updated_by';
+  'id, match_type, match_format, match_date, competition_type, competition_id, notes, side_a_games_won, side_b_games_won, winner_side, loser_side, is_active, created_at, created_by, updated_at, updated_by, team_a, team_b';
 
 const createUuid = () => {
   if (typeof crypto !== 'undefined' && 'randomUUID' in crypto) {
@@ -34,16 +34,13 @@ export const listMatches = async (options?: {
   dateTo?: string;
   competitionId?: string;
   competitionType?: 'ranked' | 'tournament';
+  matchType?: 'singles' | 'doubles';
 }): Promise<DbResult<MatchRow[]>> => {
   const includeInactive = options?.includeInactive ?? false;
-  let query = supabase.from('matches').select(matchSelect);
+  let query = supabase.from('match_team_rosters').select(matchSelect);
 
   if (!includeInactive) {
     query = query.eq('is_active', true);
-  }
-
-  if (options?.playerId) {
-    query = query.or(`player1_id.eq.${options.playerId},player2_id.eq.${options.playerId}`);
   }
 
   if (options?.competitionId) {
@@ -52,6 +49,10 @@ export const listMatches = async (options?: {
 
   if (options?.competitionType) {
     query = query.eq('competition_type', options.competitionType);
+  }
+
+  if (options?.matchType) {
+    query = query.eq('match_type', options.matchType);
   }
 
   if (options?.dateFrom) {
@@ -64,12 +65,22 @@ export const listMatches = async (options?: {
 
   const { data, error } = await query;
 
-  return { data: (data as MatchRow[]) ?? null, error: mapDbError(error) };
+  let matches = (data as MatchRow[]) ?? [];
+  if (options?.playerId) {
+    const targetId = options.playerId;
+    matches = matches.filter((match) => {
+      const teamA = match.team_a ?? [];
+      const teamB = match.team_b ?? [];
+      return teamA.includes(targetId) || teamB.includes(targetId);
+    });
+  }
+
+  return { data: matches, error: mapDbError(error) };
 };
 
 export const getMatchById = async (id: string): Promise<DbResult<MatchRow>> => {
   const { data, error } = await supabase
-    .from('matches')
+    .from('match_team_rosters')
     .select(matchSelect)
     .eq('id', id)
     .maybeSingle();
@@ -91,10 +102,13 @@ export const createMatch = async (input: CreateMatchInput): Promise<DbResult<{ i
 
   const { error: rpcError } = await supabase.rpc('match_create', {
     p_match_id: matchId,
-    p_player1_id: input.player1Id,
-    p_player2_id: input.player2Id,
+    p_match_type: input.matchType,
     p_match_date: input.matchDate,
     p_match_format: input.matchFormat,
+    p_competition_type: input.competitionType ?? 'ranked',
+    p_competition_id: input.competitionId ?? null,
+    p_team_a: input.teamA,
+    p_team_b: input.teamB,
     p_games: input.games,
     p_notes: input.notes ?? null,
     p_created_by: profileId
@@ -115,12 +129,15 @@ export const updateMatch = async (input: UpdateMatchInput): Promise<DbResult<{ i
 
   const { error: rpcError } = await supabase.rpc('match_update', {
     p_match_id: input.matchId,
-    p_games: input.games,
+    p_match_type: input.matchType,
+    p_match_date: input.matchDate,
+    p_match_format: input.matchFormat,
+    p_competition_type: input.competitionType,
+    p_competition_id: input.competitionId,
     p_notes: input.notes ?? null,
-    p_match_format: input.matchFormat ?? null,
-    p_match_date: input.matchDate ?? null,
-    p_player1_id: input.player1Id ?? null,
-    p_player2_id: input.player2Id ?? null,
+    p_team_a: input.teamA,
+    p_team_b: input.teamB,
+    p_games: input.games,
     p_updated_by: profileId
   });
 

@@ -1,11 +1,11 @@
 <script setup lang="ts">
-import { computed, onMounted, ref } from 'vue';
+import { computed, onMounted, ref, watch } from 'vue';
 import { AgGridVue } from 'ag-grid-vue3';
 import type { ColDef, GridOptions } from 'ag-grid-community';
 import { listMatches } from '../lib/data/matches';
 import { listGamesByMatchIds } from '../lib/data/games';
 import { listProfiles } from '../lib/data/profiles';
-import type { MatchRow, GameRow, ProfileRow } from '../lib/data/types';
+import type { MatchRow, GameRow, MatchType, ProfileRow } from '../lib/data/types';
 import { buildMatchGameTotals, calculateEloRatings } from '../lib/elo';
 import 'ag-grid-community/styles/ag-grid.css';
 import 'ag-grid-community/styles/ag-theme-quartz.css';
@@ -29,6 +29,7 @@ const loading = ref(false);
 const error = ref<string | null>(null);
 const rows = ref<LeaderRow[]>([]);
 const searchTerm = ref('');
+const matchType = ref<MatchType>('doubles');
 
 const formatPlayerLabel = (player: ProfileRow) => {
   const base = player.display_name?.trim() || player.username;
@@ -37,11 +38,14 @@ const formatPlayerLabel = (player: ProfileRow) => {
 
 const buildLeaderboardRows = (profiles: ProfileRow[], matches: MatchRow[], games: GameRow[]) => {
   const statsByPlayer = new Map<string, LeaderRow>();
-
-  profiles.forEach((player) => {
-    statsByPlayer.set(player.id, {
-      id: player.id,
-      name: formatPlayerLabel(player),
+  const ensureRow = (playerId: string, name = 'Unknown player') => {
+    const existing = statsByPlayer.get(playerId);
+    if (existing) {
+      return existing;
+    }
+    const entry: LeaderRow = {
+      id: playerId,
+      name,
       rank: 0,
       elo: null,
       matchesPlayed: 0,
@@ -52,76 +56,50 @@ const buildLeaderboardRows = (profiles: ProfileRow[], matches: MatchRow[], games
       gamesLost: 0,
       gamesDiff: 0,
       pointsFor: 0
-    });
-  });
+    };
+    statsByPlayer.set(playerId, entry);
+    return entry;
+  };
 
-  matches.forEach((match) => {
-    if (!statsByPlayer.has(match.player1_id)) {
-      statsByPlayer.set(match.player1_id, {
-        id: match.player1_id,
-        name: 'Unknown player',
-        rank: 0,
-        elo: null,
-        matchesPlayed: 0,
-        wins: 0,
-        losses: 0,
-        winPct: 0,
-        gamesWon: 0,
-        gamesLost: 0,
-        gamesDiff: 0,
-        pointsFor: 0
-      });
-    }
-    if (!statsByPlayer.has(match.player2_id)) {
-      statsByPlayer.set(match.player2_id, {
-        id: match.player2_id,
-        name: 'Unknown player',
-        rank: 0,
-        elo: null,
-        matchesPlayed: 0,
-        wins: 0,
-        losses: 0,
-        winPct: 0,
-        gamesWon: 0,
-        gamesLost: 0,
-        gamesDiff: 0,
-        pointsFor: 0
-      });
-    }
+  profiles.forEach((player) => {
+    ensureRow(player.id, formatPlayerLabel(player));
   });
 
   const matchGameTotals = buildMatchGameTotals(matches, games);
 
   matches.forEach((match) => {
     const totals = matchGameTotals.get(match.id);
-    if (!totals) {
+    if (!totals || totals.totalGames <= 0) {
       return;
     }
 
-    const player1 = statsByPlayer.get(match.player1_id);
-    const player2 = statsByPlayer.get(match.player2_id);
-    if (!player1 || !player2) {
+    const teamA = match.team_a ?? [];
+    const teamB = match.team_b ?? [];
+    if (!teamA.length || !teamB.length) {
       return;
     }
 
-    player1.matchesPlayed += 1;
-    player2.matchesPlayed += 1;
+    const sideAWin = totals.sideAWins > totals.sideBWins;
+    const sideBWin = totals.sideBWins > totals.sideAWins;
 
-    player1.gamesWon += totals.p1Wins;
-    player1.gamesLost += totals.p2Wins;
-    player2.gamesWon += totals.p2Wins;
-    player2.gamesLost += totals.p1Wins;
+    const applySideTotals = (playerId: string, isSideA: boolean) => {
+      const row = ensureRow(playerId);
+      row.matchesPlayed += 1;
+      row.gamesWon += isSideA ? totals.sideAWins : totals.sideBWins;
+      row.gamesLost += isSideA ? totals.sideBWins : totals.sideAWins;
+      row.pointsFor += isSideA ? totals.sideAPoints : totals.sideBPoints;
 
-    player1.pointsFor += totals.p1Points;
-    player2.pointsFor += totals.p2Points;
+      if (sideAWin && isSideA) {
+        row.wins += 1;
+      } else if (sideBWin && !isSideA) {
+        row.wins += 1;
+      } else if (sideAWin || sideBWin) {
+        row.losses += 1;
+      }
+    };
 
-    if (totals.p1Wins > totals.p2Wins) {
-      player1.wins += 1;
-      player2.losses += 1;
-    } else if (totals.p2Wins > totals.p1Wins) {
-      player2.wins += 1;
-      player1.losses += 1;
-    }
+    teamA.forEach((playerId) => applySideTotals(playerId, true));
+    teamB.forEach((playerId) => applySideTotals(playerId, false));
   });
 
   const eloByPlayer = calculateEloRatings(
@@ -185,7 +163,10 @@ const loadLeaderboard = async () => {
       return;
     }
 
-    const { data: matchesData, error: matchesError } = await listMatches({ includeInactive: false });
+    const { data: matchesData, error: matchesError } = await listMatches({
+      includeInactive: false,
+      matchType: matchType.value
+    });
     if (matchesError) {
       error.value = matchesError;
       rows.value = [];
@@ -359,6 +340,10 @@ const columnDefs = computed<ColDef[]>(() => [
 onMounted(() => {
   loadLeaderboard();
 });
+
+watch(matchType, () => {
+  loadLeaderboard();
+});
 </script>
 
 <template>
@@ -369,6 +354,28 @@ onMounted(() => {
     </header>
 
     <div class="leaderboard-controls">
+      <div class="mode-toggle auth-toggle match-type-toggle--page" role="tablist" aria-label="Match type">
+        <button
+          type="button"
+          class="auth-toggle__btn"
+          :class="{ 'is-active': matchType === 'doubles' }"
+          role="tab"
+          :aria-selected="matchType === 'doubles'"
+          @click="matchType = 'doubles'"
+        >
+          Doubles
+        </button>
+        <button
+          type="button"
+          class="auth-toggle__btn"
+          :class="{ 'is-active': matchType === 'singles' }"
+          role="tab"
+          :aria-selected="matchType === 'singles'"
+          @click="matchType = 'singles'"
+        >
+          Singles
+        </button>
+      </div>
       <input
         v-model="searchTerm"
         class="leaderboard-search"
@@ -405,6 +412,13 @@ onMounted(() => {
 .leaderboard-controls {
   display: flex;
   width: 100%;
+  gap: var(--space-sm);
+  flex-wrap: wrap;
+  align-items: center;
+}
+
+.match-type-toggle--page {
+  width: min(360px, 100%);
 }
 
 .leaderboard-search {

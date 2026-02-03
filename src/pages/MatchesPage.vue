@@ -6,8 +6,8 @@ import type { ColDef, GridApi, GridOptions } from 'ag-grid-community';
 import { listMatches, updateMatch, voidMatch } from '../lib/data/matches';
 import { listGamesByMatchId, listGamesByMatchIds } from '../lib/data/games';
 import { listProfiles } from '../lib/data/profiles';
-import type { GameInput, MatchFormat, MatchRow, ProfileRow } from '../lib/data/types';
-import { buildMatchGameTotals, calculateEloDeltasForPlayer } from '../lib/elo';
+import type { GameInput, MatchFormat, MatchRow, MatchType, ProfileRow } from '../lib/data/types';
+import { buildMatchGameTotals, calculateEloDeltasForPlayer, type MatchGameTotals } from '../lib/elo';
 import { useAuth } from '../stores/auth';
 import 'ag-grid-community/styles/ag-grid.css';
 import 'ag-grid-community/styles/ag-theme-quartz.css';
@@ -28,14 +28,17 @@ type SortOption = 'date_desc' | 'date_asc' | 'created_desc' | 'created_asc';
 
 type MatchGameRow = {
   gameNumber: number;
-  player1Score: number | string | null;
-  player2Score: number | string | null;
+  sideAScore: number | string | null;
+  sideBScore: number | string | null;
 };
 
-const buildGameRow = (gameNumber: number, scores?: { player1: number; player2: number }): MatchGameRow => ({
+const buildGameRow = (
+  gameNumber: number,
+  scores?: { sideA: number; sideB: number }
+): MatchGameRow => ({
   gameNumber,
-  player1Score: scores?.player1 ?? null,
-  player2Score: scores?.player2 ?? null
+  sideAScore: scores?.sideA ?? null,
+  sideBScore: scores?.sideB ?? null
 });
 
 const formatOptions: Array<{ value: MatchFormat; label: string }> = [
@@ -59,10 +62,12 @@ const sortOrder = ref<SortOption | ''>('date_desc');
 const opponentId = ref('');
 const filterWins = ref(true);
 const filterLosses = ref(true);
+const matchType = ref<MatchType>('doubles');
 
 const matches = ref<MatchRow[]>([]);
 const matchesLoading = ref(false);
 const matchesError = ref<string | null>(null);
+const matchTotalsById = ref<Map<string, MatchGameTotals>>(new Map());
 const eloDeltasByMatchId = ref<Map<string, number>>(new Map());
 const eloLoading = ref(false);
 
@@ -81,8 +86,12 @@ const editValidationErrors = ref<string[]>([]);
 const editCellErrors = ref<Record<string, string>>({});
 const editSubmitting = ref(false);
 
-const editPlayer1Id = ref('');
-const editPlayer2Id = ref('');
+const editMatchType = ref<MatchType>('doubles');
+const isEditDoubles = computed(() => editMatchType.value === 'doubles');
+const editTeamAPlayer1Id = ref('');
+const editTeamAPlayer2Id = ref('');
+const editTeamBPlayer1Id = ref('');
+const editTeamBPlayer2Id = ref('');
 const editMatchDate = ref(todayString());
 const editMatchFormat = ref<MatchFormat>('bo3');
 const editNotes = ref('');
@@ -139,10 +148,92 @@ const playerLabelForId = (id: string) => {
   return player ? formatPlayerLabel(player) : 'Unknown player';
 };
 
+const editTeamAIds = computed(() => {
+  const ids = [editTeamAPlayer1Id.value];
+  if (isEditDoubles.value) {
+    ids.push(editTeamAPlayer2Id.value);
+  }
+  return ids.filter(Boolean);
+});
+
+const editTeamBIds = computed(() => {
+  const ids = [editTeamBPlayer1Id.value];
+  if (isEditDoubles.value) {
+    ids.push(editTeamBPlayer2Id.value);
+  }
+  return ids.filter(Boolean);
+});
+
+const editSelectedIds = computed(
+  () => new Set([...editTeamAIds.value, ...editTeamBIds.value].filter(Boolean))
+);
+
+const buildEditOptions = (currentId: string) =>
+  profiles.value.filter((player) => player.id === currentId || !editSelectedIds.value.has(player.id));
+
+const editTeamAPlayer1Options = computed(() => buildEditOptions(editTeamAPlayer1Id.value));
+const editTeamAPlayer2Options = computed(() => buildEditOptions(editTeamAPlayer2Id.value));
+const editTeamBPlayer1Options = computed(() => buildEditOptions(editTeamBPlayer1Id.value));
+const editTeamBPlayer2Options = computed(() => buildEditOptions(editTeamBPlayer2Id.value));
+
+const editTeamALabel = computed(() => {
+  const labels = editTeamAIds.value.map((id) => playerLabelForId(id)).filter(Boolean);
+  return labels.length ? `Team A: ${labels.join(' & ')}` : 'Team A';
+});
+
+const editTeamBLabel = computed(() => {
+  const labels = editTeamBIds.value.map((id) => playerLabelForId(id)).filter(Boolean);
+  return labels.length ? `Team B: ${labels.join(' & ')}` : 'Team B';
+});
+
 const matchFormatLabel = (format: MatchFormat) => {
   const option = formatOptions.find((item) => item.value === format);
   return option?.label ?? format.toUpperCase();
 };
+
+const resolveTeamIds = (match: MatchRow, side: 'A' | 'B') =>
+  side === 'A' ? match.team_a ?? [] : match.team_b ?? [];
+
+const resolvePlayerSide = (match: MatchRow, playerId: string) => {
+  const teamA = match.team_a ?? [];
+  if (teamA.includes(playerId)) {
+    return 'A' as const;
+  }
+  const teamB = match.team_b ?? [];
+  if (teamB.includes(playerId)) {
+    return 'B' as const;
+  }
+  return null;
+};
+
+const resolveOpponentIds = (match: MatchRow, playerId: string) => {
+  const side = resolvePlayerSide(match, playerId);
+  if (side === 'A') {
+    return resolveTeamIds(match, 'B');
+  }
+  if (side === 'B') {
+    return resolveTeamIds(match, 'A');
+  }
+  return [];
+};
+
+const isParticipant = (match: MatchRow, playerId: string) => {
+  if (!playerId) {
+    return false;
+  }
+  const teamA = match.team_a ?? [];
+  const teamB = match.team_b ?? [];
+  return teamA.includes(playerId) || teamB.includes(playerId);
+};
+
+const formatTeamLabel = (ids: string[], highlightId?: string) => {
+  const labels = ids
+    .map((id) => (highlightId && id === highlightId ? 'You' : playerLabelForId(id)))
+    .filter(Boolean);
+  return labels.length ? labels.join(' & ') : 'Unknown team';
+};
+
+const matchTypeBadge = (match: MatchRow) => (match.match_type === 'doubles' ? 'D' : 'S');
 
 const visibleMatches = computed(() => {
   let list = [...matches.value];
@@ -153,22 +244,23 @@ const visibleMatches = computed(() => {
 
   if (opponentId.value && targetPlayerId.value) {
     list = list.filter((match) => {
-      const isTargetP1 = match.player1_id === targetPlayerId.value;
-      const isTargetP2 = match.player2_id === targetPlayerId.value;
-      if (!isTargetP1 && !isTargetP2) {
-        return false;
-      }
-      const otherId = isTargetP1 ? match.player2_id : match.player1_id;
-      return otherId === opponentId.value;
+      const opponents = resolveOpponentIds(match, targetPlayerId.value);
+      return opponents.includes(opponentId.value);
     });
   }
 
   if (targetPlayerId.value && !(filterWins.value && filterLosses.value)) {
     list = list.filter((match) => {
-      if (!match.winner_user_id) {
+      const totals = matchTotalsById.value.get(match.id);
+      if (!totals || totals.totalGames <= 0) {
         return false;
       }
-      const isWin = match.winner_user_id === targetPlayerId.value;
+      const side = resolvePlayerSide(match, targetPlayerId.value);
+      if (!side) {
+        return false;
+      }
+      const isWin =
+        side === 'A' ? totals.sideAWins > totals.sideBWins : totals.sideBWins > totals.sideAWins;
       if (isWin && filterWins.value) {
         return true;
       }
@@ -224,39 +316,41 @@ const matchDateLabel = (value: string) => {
 };
 
 const matchPlayersLabel = (match: MatchRow) => {
-  const player1Name = playerLabelForId(match.player1_id) || 'Player 1';
-  const player2Name = playerLabelForId(match.player2_id) || 'Player 2';
-
-  if (profile.value && targetPlayerId.value === profile.value.id) {
-    if (profile.value.id === match.player1_id) {
-      return `You vs ${player2Name}`;
-    }
-    if (profile.value.id === match.player2_id) {
-      return `You vs ${player1Name}`;
-    }
-  }
-
-  return `${player1Name} vs ${player2Name}`;
+  const highlightId =
+    profile.value && targetPlayerId.value === profile.value.id ? profile.value.id : undefined;
+  const teamALabel = formatTeamLabel(resolveTeamIds(match, 'A'), highlightId);
+  const teamBLabel = formatTeamLabel(resolveTeamIds(match, 'B'), highlightId);
+  return `${teamALabel} vs ${teamBLabel}`;
 };
 
 const matchScoreLabel = (match: MatchRow) => {
-  const p1 = match.player1_games_won;
-  const p2 = match.player2_games_won;
-
-  if (targetPlayerId.value === match.player1_id) {
-    return `${p1}-${p2}`;
+  const totals = matchTotalsById.value.get(match.id);
+  const sideAWins = totals?.sideAWins ?? match.side_a_games_won;
+  const sideBWins = totals?.sideBWins ?? match.side_b_games_won;
+  if (targetPlayerId.value) {
+    const side = resolvePlayerSide(match, targetPlayerId.value);
+    if (side === 'B') {
+      return `${sideBWins}-${sideAWins}`;
+    }
   }
-  if (targetPlayerId.value === match.player2_id) {
-    return `${p2}-${p1}`;
-  }
-  return `${p1}-${p2}`;
+  return `${sideAWins}-${sideBWins}`;
 };
 
 const matchOutcome = (match: MatchRow) => {
-  if (!targetPlayerId.value || !match.winner_user_id) {
+  if (!targetPlayerId.value) {
     return '';
   }
-  return match.winner_user_id === targetPlayerId.value ? 'Win' : 'Loss';
+  const totals = matchTotalsById.value.get(match.id);
+  if (!totals || totals.totalGames <= 0) {
+    return '';
+  }
+  const side = resolvePlayerSide(match, targetPlayerId.value);
+  if (!side) {
+    return '';
+  }
+  const isWin =
+    side === 'A' ? totals.sideAWins > totals.sideBWins : totals.sideBWins > totals.sideAWins;
+  return isWin ? 'Win' : 'Loss';
 };
 
 const matchEloDelta = (match: MatchRow) => eloDeltasByMatchId.value.get(match.id);
@@ -301,10 +395,7 @@ const canEditMatch = computed(() => {
   if (!editMatch.value.is_active) {
     return false;
   }
-  return (
-    profile.value.id === editMatch.value.player1_id ||
-    profile.value.id === editMatch.value.player2_id
-  );
+  return isParticipant(editMatch.value, profile.value.id);
 });
 const canEditScores = computed(() => canEditMatch.value);
 
@@ -315,8 +406,11 @@ const resetEditState = () => {
   editValidationErrors.value = [];
   editCellErrors.value = {};
   editSubmitting.value = false;
-  editPlayer1Id.value = '';
-  editPlayer2Id.value = '';
+  editMatchType.value = 'doubles';
+  editTeamAPlayer1Id.value = '';
+  editTeamAPlayer2Id.value = '';
+  editTeamBPlayer1Id.value = '';
+  editTeamBPlayer2Id.value = '';
   editMatchDate.value = todayString();
   editMatchFormat.value = 'bo3';
   editNotes.value = '';
@@ -336,11 +430,11 @@ const syncEditRows = (count: number) => {
 
 const hydrateEditRows = (
   count: number,
-  games: Array<{ game_number: number; player1_score: number; player2_score: number }>
+  games: Array<{ game_number: number; side_a_score: number; side_b_score: number }>
 ) => {
-  const gameMap = new Map<number, { player1: number; player2: number }>();
+  const gameMap = new Map<number, { sideA: number; sideB: number }>();
   games.forEach((game) => {
-    gameMap.set(game.game_number, { player1: game.player1_score, player2: game.player2_score });
+    gameMap.set(game.game_number, { sideA: game.side_a_score, sideB: game.side_b_score });
   });
 
   const next: MatchGameRow[] = [];
@@ -376,6 +470,7 @@ const loadMatches = async () => {
     const { data, error } = await listMatches({
       includeInactive: isAdmin.value ? includeInactive.value : false,
       playerId: targetPlayerId.value,
+      matchType: matchType.value,
       dateFrom: dateFrom.value || undefined,
       dateTo: dateTo.value || undefined
     });
@@ -383,12 +478,28 @@ const loadMatches = async () => {
     if (error) {
       matchesError.value = error;
       matches.value = [];
+      matchTotalsById.value = new Map();
     } else {
       matches.value = data ?? [];
+      const matchIds = matches.value.map((match) => match.id);
+      if (matchIds.length) {
+        const { data: gamesData, error: gamesError } = await listGamesByMatchIds(matchIds, {
+          includeInactive: isAdmin.value ? includeInactive.value : false
+        });
+        if (gamesError) {
+          matchesError.value = gamesError;
+          matchTotalsById.value = new Map();
+        } else {
+          matchTotalsById.value = buildMatchGameTotals(matches.value, gamesData ?? []);
+        }
+      } else {
+        matchTotalsById.value = new Map();
+      }
     }
   } catch (err) {
     matchesError.value = err instanceof Error ? err.message : 'Network error loading matches.';
     matches.value = [];
+    matchTotalsById.value = new Map();
   } finally {
     matchesLoading.value = false;
     void loadEloDeltas();
@@ -402,7 +513,10 @@ const loadEloDeltas = async () => {
 
   eloLoading.value = true;
 
-  const { data: allMatches, error: matchesError } = await listMatches({ includeInactive: false });
+  const { data: allMatches, error: matchesError } = await listMatches({
+    includeInactive: false,
+    matchType: matchType.value
+  });
   if (matchesError) {
     eloDeltasByMatchId.value = new Map();
     eloLoading.value = false;
@@ -422,7 +536,7 @@ const loadEloDeltas = async () => {
   const totals = buildMatchGameTotals(allMatches ?? [], gamesData ?? []);
   const targetId = targetPlayerId.value;
   const totalMatchesPlayed = (allMatches ?? []).reduce((sum, match) => {
-    if (match.player1_id !== targetId && match.player2_id !== targetId) {
+    if (!isParticipant(match, targetId)) {
       return sum;
     }
     const matchTotals = totals.get(match.id);
@@ -445,8 +559,13 @@ const loadEloDeltas = async () => {
 const openMatchDialog = async (match: MatchRow) => {
   resetEditState();
   editMatch.value = match;
-  editPlayer1Id.value = match.player1_id;
-  editPlayer2Id.value = match.player2_id;
+  editMatchType.value = match.match_type;
+  const teamA = match.team_a ?? [];
+  const teamB = match.team_b ?? [];
+  editTeamAPlayer1Id.value = teamA[0] ?? '';
+  editTeamAPlayer2Id.value = teamA[1] ?? '';
+  editTeamBPlayer1Id.value = teamB[0] ?? '';
+  editTeamBPlayer2Id.value = teamB[1] ?? '';
   editMatchDate.value = match.match_date;
   editMatchFormat.value = match.match_format;
   editNotes.value = match.notes ?? '';
@@ -498,16 +617,30 @@ const validateEditMatch = () => {
     errors.push('Match date cannot be in the future.');
   }
 
-  if (!editPlayer1Id.value) {
-    errors.push('Player 1 is required.');
+  if (!editTeamAPlayer1Id.value) {
+    errors.push('Team A player 1 is required.');
   }
 
-  if (!editPlayer2Id.value) {
-    errors.push('Player 2 is required.');
+  if (isEditDoubles.value && !editTeamAPlayer2Id.value) {
+    errors.push('Team A player 2 is required.');
   }
 
-  if (editPlayer1Id.value && editPlayer2Id.value && editPlayer1Id.value === editPlayer2Id.value) {
-    errors.push('Player 1 and Player 2 must be different.');
+  if (!editTeamBPlayer1Id.value) {
+    errors.push('Team B player 1 is required.');
+  }
+
+  if (isEditDoubles.value && !editTeamBPlayer2Id.value) {
+    errors.push('Team B player 2 is required.');
+  }
+
+  const selectedPlayers = [
+    editTeamAPlayer1Id.value,
+    isEditDoubles.value ? editTeamAPlayer2Id.value : '',
+    editTeamBPlayer1Id.value,
+    isEditDoubles.value ? editTeamBPlayer2Id.value : ''
+  ].filter(Boolean);
+  if (selectedPlayers.length !== new Set(selectedPlayers).size) {
+    errors.push('Players must be unique across both teams.');
   }
 
   if (editMatch.value && !isAdmin.value && !editMatch.value.is_active) {
@@ -515,18 +648,33 @@ const validateEditMatch = () => {
   }
 
   if (!isAdmin.value && editMatch.value) {
+    const currentTeamA = editMatch.value.team_a ?? [];
+    const currentTeamB = editMatch.value.team_b ?? [];
+    const nextTeamA = isEditDoubles.value
+      ? [editTeamAPlayer1Id.value, editTeamAPlayer2Id.value]
+      : [editTeamAPlayer1Id.value];
+    const nextTeamB = isEditDoubles.value
+      ? [editTeamBPlayer1Id.value, editTeamBPlayer2Id.value]
+      : [editTeamBPlayer1Id.value];
     if (
-      editPlayer1Id.value !== editMatch.value.player1_id ||
-      editPlayer2Id.value !== editMatch.value.player2_id
+      editMatchType.value !== editMatch.value.match_type ||
+      currentTeamA[0] !== nextTeamA[0] ||
+      (isEditDoubles.value && currentTeamA[1] !== nextTeamA[1]) ||
+      currentTeamB[0] !== nextTeamB[0] ||
+      (isEditDoubles.value && currentTeamB[1] !== nextTeamB[1])
     ) {
       errors.push('Players cannot be changed.');
     }
   }
 
+  if (!isAdmin.value && editMatch.value) {
+    if (editMatchDate.value !== editMatch.value.match_date) {
+      errors.push('Match date cannot be changed.');
+    }
+  }
+
   if (profile.value && editMatch.value) {
-    const isParticipant =
-      profile.value.id === editMatch.value.player1_id || profile.value.id === editMatch.value.player2_id;
-    if (!isAdmin.value && !isParticipant) {
+    if (!isAdmin.value && !isParticipant(editMatch.value, profile.value.id)) {
       errors.push('You can only edit matches you played.');
     }
   }
@@ -538,10 +686,10 @@ const validateEditMatch = () => {
 
   for (let i = 1; i <= editGameCount.value; i += 1) {
     const row = editRows.value[i - 1] ?? buildGameRow(i);
-    const score1 = parseScore(row.player1Score);
-    const score2 = parseScore(row.player2Score);
-    const cellKey1 = `game${i}:player1Score`;
-    const cellKey2 = `game${i}:player2Score`;
+    const score1 = parseScore(row.sideAScore);
+    const score2 = parseScore(row.sideBScore);
+    const cellKey1 = `game${i}:sideAScore`;
+    const cellKey2 = `game${i}:sideBScore`;
 
     const score1Empty = score1 === null;
     const score2Empty = score2 === null;
@@ -627,8 +775,8 @@ const validateEditMatch = () => {
 
     games.push({
       game_number: i,
-      player1_score: score1,
-      player2_score: score2
+      side_a_score: score1,
+      side_b_score: score2
     });
 
     if (score1 > score2) {
@@ -696,12 +844,19 @@ const handleSave = async () => {
   editSubmitting.value = true;
   const { error } = await updateMatch({
     matchId: editMatch.value.id,
-    games,
-    notes: editNotes.value.trim() ? editNotes.value.trim() : null,
+    matchType: editMatchType.value,
+    matchDate: editMatchDate.value,
     matchFormat: editMatchFormat.value,
-    matchDate: isAdmin.value ? editMatchDate.value : undefined,
-    player1Id: isAdmin.value ? editPlayer1Id.value : undefined,
-    player2Id: isAdmin.value ? editPlayer2Id.value : undefined
+    competitionType: editMatch.value.competition_type,
+    competitionId: editMatch.value.competition_id,
+    teamA: isEditDoubles.value
+      ? [editTeamAPlayer1Id.value, editTeamAPlayer2Id.value]
+      : [editTeamAPlayer1Id.value],
+    teamB: isEditDoubles.value
+      ? [editTeamBPlayer1Id.value, editTeamBPlayer2Id.value]
+      : [editTeamBPlayer1Id.value],
+    games,
+    notes: editNotes.value.trim() ? editNotes.value.trim() : null
   });
   editSubmitting.value = false;
 
@@ -757,8 +912,8 @@ const columnDefs = computed<ColDef[]>(() => [
     valueGetter: (params) => (params.data ? `Game ${params.data.gameNumber}` : '')
   },
   {
-    headerName: playerLabelForId(editPlayer1Id.value) || 'Player 1',
-    field: 'player1Score',
+    headerName: editTeamALabel.value,
+    field: 'sideAScore',
     editable: canEditScores.value,
     minWidth: 120,
     flex: 1,
@@ -766,11 +921,11 @@ const columnDefs = computed<ColDef[]>(() => [
     valueSetter: (params) => {
       const raw = String(params.newValue ?? '').trim();
       if (raw === '') {
-        params.data.player1Score = null;
+        params.data.sideAScore = null;
         return true;
       }
       const parsed = Number(raw);
-      params.data.player1Score = Number.isFinite(parsed) ? Math.floor(parsed) : raw;
+      params.data.sideAScore = Number.isFinite(parsed) ? Math.floor(parsed) : raw;
       return true;
     },
     cellClassRules: {
@@ -779,14 +934,14 @@ const columnDefs = computed<ColDef[]>(() => [
         if (!gameNumber) {
           return false;
         }
-        const key = `game${gameNumber}:player1Score`;
+        const key = `game${gameNumber}:sideAScore`;
         return Boolean(editCellErrors.value[key]);
       }
     }
   },
   {
-    headerName: playerLabelForId(editPlayer2Id.value) || 'Player 2',
-    field: 'player2Score',
+    headerName: editTeamBLabel.value,
+    field: 'sideBScore',
     editable: canEditScores.value,
     minWidth: 120,
     flex: 1,
@@ -794,11 +949,11 @@ const columnDefs = computed<ColDef[]>(() => [
     valueSetter: (params) => {
       const raw = String(params.newValue ?? '').trim();
       if (raw === '') {
-        params.data.player2Score = null;
+        params.data.sideBScore = null;
         return true;
       }
       const parsed = Number(raw);
-      params.data.player2Score = Number.isFinite(parsed) ? Math.floor(parsed) : raw;
+      params.data.sideBScore = Number.isFinite(parsed) ? Math.floor(parsed) : raw;
       return true;
     },
     cellClassRules: {
@@ -807,7 +962,7 @@ const columnDefs = computed<ColDef[]>(() => [
         if (!gameNumber) {
           return false;
         }
-        const key = `game${gameNumber}:player2Score`;
+        const key = `game${gameNumber}:sideBScore`;
         return Boolean(editCellErrors.value[key]);
       }
     }
@@ -821,11 +976,14 @@ const defaultColDef: ColDef = {
   suppressSizeToFit: true
 };
 
-watch([includeInactive, dateFrom, dateTo, opponentId, sortOrder, filterWins, filterLosses, profile, isAdmin], () => {
-  if (profile.value) {
-    loadMatches();
+watch(
+  [includeInactive, dateFrom, dateTo, opponentId, sortOrder, filterWins, filterLosses, matchType, profile, isAdmin],
+  () => {
+    if (profile.value) {
+      loadMatches();
+    }
   }
-});
+);
 
 watch(
   () => route.params.id,
@@ -848,7 +1006,15 @@ watch(isAdmin, (next) => {
   loadProfiles();
 });
 
-watch([editPlayer1Id, editPlayer2Id], () => {
+watch([editTeamAPlayer1Id, editTeamAPlayer2Id, editTeamBPlayer1Id, editTeamBPlayer2Id], () => {
+  editGridApi.value?.refreshHeader();
+});
+
+watch(editMatchType, (next) => {
+  if (next === 'singles') {
+    editTeamAPlayer2Id.value = '';
+    editTeamBPlayer2Id.value = '';
+  }
   editGridApi.value?.refreshHeader();
 });
 
@@ -885,9 +1051,36 @@ onMounted(() => {
         <button class="ghost-btn" type="button" @click="openFilterDialog">Filters</button>
       </header>
 
-    <div v-if="matchesLoading" class="form-message">Loading matches...</div>
-    <div v-else-if="matchesError" class="form-message is-error">{{ matchesError }}</div>
-    <div v-else-if="!visibleMatches.length" class="form-message">No matches found.</div>
+      <div
+        class="mode-toggle auth-toggle match-type-toggle match-type-toggle--page"
+        role="tablist"
+        aria-label="Match type"
+      >
+        <button
+          type="button"
+          class="auth-toggle__btn"
+          :class="{ 'is-active': matchType === 'doubles' }"
+          role="tab"
+          :aria-selected="matchType === 'doubles'"
+          @click="matchType = 'doubles'"
+        >
+          Doubles
+        </button>
+        <button
+          type="button"
+          class="auth-toggle__btn"
+          :class="{ 'is-active': matchType === 'singles' }"
+          role="tab"
+          :aria-selected="matchType === 'singles'"
+          @click="matchType = 'singles'"
+        >
+          Singles
+        </button>
+      </div>
+
+      <div v-if="matchesLoading" class="form-message">Loading matches...</div>
+      <div v-else-if="matchesError" class="form-message is-error">{{ matchesError }}</div>
+      <div v-else-if="!visibleMatches.length" class="form-message">No matches found.</div>
 
       <section v-else class="match-list">
         <article
@@ -898,31 +1091,34 @@ onMounted(() => {
         >
           <div class="match-card__header">
             <div>
-              <p class="match-card__date">{{ matchDateLabel(match.match_date) }}</p>
+              <p class="match-card__date">
+                <span class="match-type-pill">{{ matchTypeBadge(match) }}</span>
+                {{ matchDateLabel(match.match_date) }}
+              </p>
               <h3 class="match-card__players">{{ matchPlayersLabel(match) }}</h3>
               <p class="match-card__detail">{{ matchFormatLabel(match.match_format) }}</p>
             </div>
-          <div class="match-card__score">
-            <div class="match-card__pills">
-              <span
-                v-if="matchEloDeltaLabel(match) !== null"
-                class="match-card__elo"
-                :class="matchEloDeltaClass(match)"
-              >
-                Elo {{ matchEloDeltaLabel(match) }}
-              </span>
-              <span
-                v-if="matchOutcome(match)"
-                class="match-card__outcome"
-                :class="matchOutcome(match) === 'Win' ? 'is-win' : 'is-loss'"
-              >
-                {{ matchOutcome(match) }}
-              </span>
+            <div class="match-card__score">
+              <div class="match-card__pills">
+                <span
+                  v-if="matchEloDeltaLabel(match) !== null"
+                  class="match-card__elo"
+                  :class="matchEloDeltaClass(match)"
+                >
+                  Elo {{ matchEloDeltaLabel(match) }}
+                </span>
+                <span
+                  v-if="matchOutcome(match)"
+                  class="match-card__outcome"
+                  :class="matchOutcome(match) === 'Win' ? 'is-win' : 'is-loss'"
+                >
+                  {{ matchOutcome(match) }}
+                </span>
+              </div>
+              <span class="match-card__result">{{ matchScoreLabel(match) }}</span>
+              <span class="match-card__format">{{ matchFormatLabel(match.match_format) }}</span>
             </div>
-            <span class="match-card__result">{{ matchScoreLabel(match) }}</span>
-            <span class="match-card__format">{{ matchFormatLabel(match.match_format) }}</span>
           </div>
-        </div>
           <div class="match-card__actions">
             <span v-if="!match.is_active" class="match-card__status">Deleted</span>
             <button class="ghost-btn" type="button" @click="openMatchDialog(match)">View / Edit</button>
@@ -1011,28 +1207,77 @@ onMounted(() => {
         <div v-else-if="editError" class="form-message is-error">{{ editError }}</div>
 
         <div v-if="editMatch" class="match-dialog__body">
+          <div class="mode-toggle auth-toggle match-type-toggle" role="tablist" aria-label="Match type">
+            <button
+              type="button"
+              class="auth-toggle__btn"
+              :class="{ 'is-active': editMatchType === 'doubles' }"
+              role="tab"
+              :aria-selected="editMatchType === 'doubles'"
+              :disabled="!canEditPlayers"
+              @click="canEditPlayers && (editMatchType = 'doubles')"
+            >
+              Doubles
+            </button>
+            <button
+              type="button"
+              class="auth-toggle__btn"
+              :class="{ 'is-active': editMatchType === 'singles' }"
+              role="tab"
+              :aria-selected="editMatchType === 'singles'"
+              :disabled="!canEditPlayers"
+              @click="canEditPlayers && (editMatchType = 'singles')"
+            >
+              Singles
+            </button>
+          </div>
+
           <div class="matchup-row">
-            <label class="field matchup-field">
-              <span>Player 1</span>
-              <select v-model="editPlayer1Id" :disabled="!canEditPlayers">
-                <option value="" disabled>Select player 1</option>
-                <option v-for="player in profiles" :key="player.id" :value="player.id">
-                  {{ formatPlayerLabel(player) }}
-                </option>
-              </select>
-            </label>
+            <div class="team-stack">
+              <label class="field matchup-field">
+                <span>Team A - Player 1</span>
+                <select v-model="editTeamAPlayer1Id" :disabled="!canEditPlayers">
+                  <option value="" disabled>Select player</option>
+                  <option v-for="player in editTeamAPlayer1Options" :key="player.id" :value="player.id">
+                    {{ formatPlayerLabel(player) }}
+                  </option>
+                </select>
+              </label>
+
+              <label v-if="isEditDoubles" class="field matchup-field">
+                <span>Team A - Player 2</span>
+                <select v-model="editTeamAPlayer2Id" :disabled="!canEditPlayers">
+                  <option value="" disabled>Select player</option>
+                  <option v-for="player in editTeamAPlayer2Options" :key="player.id" :value="player.id">
+                    {{ formatPlayerLabel(player) }}
+                  </option>
+                </select>
+              </label>
+            </div>
 
             <span class="matchup-vs">vs.</span>
 
-            <label class="field matchup-field">
-              <span>Player 2</span>
-              <select v-model="editPlayer2Id" :disabled="!canEditPlayers">
-                <option value="" disabled>Select player 2</option>
-                <option v-for="player in profiles" :key="player.id" :value="player.id">
-                  {{ formatPlayerLabel(player) }}
-                </option>
-              </select>
-            </label>
+            <div class="team-stack">
+              <label class="field matchup-field">
+                <span>Team B - Player 1</span>
+                <select v-model="editTeamBPlayer1Id" :disabled="!canEditPlayers">
+                  <option value="" disabled>Select player</option>
+                  <option v-for="player in editTeamBPlayer1Options" :key="player.id" :value="player.id">
+                    {{ formatPlayerLabel(player) }}
+                  </option>
+                </select>
+              </label>
+
+              <label v-if="isEditDoubles" class="field matchup-field">
+                <span>Team B - Player 2</span>
+                <select v-model="editTeamBPlayer2Id" :disabled="!canEditPlayers">
+                  <option value="" disabled>Select player</option>
+                  <option v-for="player in editTeamBPlayer2Options" :key="player.id" :value="player.id">
+                    {{ formatPlayerLabel(player) }}
+                  </option>
+                </select>
+              </label>
+            </div>
           </div>
 
           <div class="field-row field-row--inline">
@@ -1123,6 +1368,14 @@ onMounted(() => {
   gap: var(--space-sm);
 }
 
+.match-type-toggle {
+  margin-bottom: var(--space-md);
+}
+
+.match-type-toggle--page {
+  width: min(360px, 100%);
+}
+
 .filter-toggle {
   display: inline-flex;
   align-items: center;
@@ -1203,6 +1456,9 @@ onMounted(() => {
 .match-list {
   display: grid;
   gap: var(--space-md);
+  width: 100%;
+  max-width: 720px;
+  margin: 0 auto;
 }
 
 .match-card {
@@ -1227,10 +1483,26 @@ onMounted(() => {
 }
 
 .match-card__date {
+  display: flex;
+  align-items: center;
+  gap: var(--space-xs);
   font-size: 11px;
   text-transform: uppercase;
   letter-spacing: 0.12em;
   color: var(--text-muted);
+}
+
+.match-type-pill {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  border-radius: 999px;
+  background: var(--brand-tint-20);
+  color: var(--text-primary);
+  font-weight: 700;
+  font-size: 11px;
 }
 
 .match-card__players {
@@ -1410,6 +1682,11 @@ onMounted(() => {
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
   align-items: end;
+  gap: var(--space-sm);
+}
+
+.team-stack {
+  display: grid;
   gap: var(--space-sm);
 }
 

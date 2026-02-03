@@ -2,10 +2,10 @@ import type { GameRow, MatchFormat, MatchRow } from './data/types';
 import { eloConfig } from '../config/eloConfig';
 
 export type MatchGameTotals = {
-  p1Wins: number;
-  p2Wins: number;
-  p1Points: number;
-  p2Points: number;
+  sideAWins: number;
+  sideBWins: number;
+  sideAPoints: number;
+  sideBPoints: number;
   totalGames: number;
 };
 
@@ -68,21 +68,21 @@ export const buildMatchGameTotals = (matches: MatchRow[], games: GameRow[]) => {
 
     const current =
       totalsByMatch.get(game.match_id) ?? {
-        p1Wins: 0,
-        p2Wins: 0,
-        p1Points: 0,
-        p2Points: 0,
+        sideAWins: 0,
+        sideBWins: 0,
+        sideAPoints: 0,
+        sideBPoints: 0,
         totalGames: 0
       };
 
-    current.p1Points += game.player1_score;
-    current.p2Points += game.player2_score;
+    current.sideAPoints += game.side_a_score;
+    current.sideBPoints += game.side_b_score;
 
-    if (game.player1_score > game.player2_score) {
-      current.p1Wins += 1;
+    if (game.side_a_score > game.side_b_score) {
+      current.sideAWins += 1;
       current.totalGames += 1;
-    } else if (game.player2_score > game.player1_score) {
-      current.p2Wins += 1;
+    } else if (game.side_b_score > game.side_a_score) {
+      current.sideBWins += 1;
       current.totalGames += 1;
     }
 
@@ -124,29 +124,52 @@ export const calculateEloRatings = (
       return;
     }
 
-    const player1 = ensureState(match.player1_id);
-    const player2 = ensureState(match.player2_id);
+    const teamA = match.team_a ?? [];
+    const teamB = match.team_b ?? [];
+    if (!teamA.length || !teamB.length) {
+      return;
+    }
 
-    const score1 = totals.p1Wins / totals.totalGames;
-    const score2 = totals.p2Wins / totals.totalGames;
-    const expected1 = expectedScore(player1.rating, player2.rating);
-    const expected2 = 1 - expected1;
+    const teamAStates = teamA.map((playerId) => ({
+      id: playerId,
+      state: ensureState(playerId)
+    }));
+    const teamBStates = teamB.map((playerId) => ({
+      id: playerId,
+      state: ensureState(playerId)
+    }));
+
+    const teamARating =
+      teamAStates.reduce((sum, entry) => sum + entry.state.rating, 0) / teamAStates.length;
+    const teamBRating =
+      teamBStates.reduce((sum, entry) => sum + entry.state.rating, 0) / teamBStates.length;
+
+    const scoreA = totals.sideAWins / totals.totalGames;
+    const scoreB = totals.sideBWins / totals.totalGames;
+    const expectedA = expectedScore(teamARating, teamBRating);
+    const expectedB = 1 - expectedA;
     const formatWeight = resolveFormatWeight(match.match_format);
+    const doublesMultiplier = match.match_type === 'doubles' ? eloConfig.doublesMultiplier : 1;
 
-    const k1 = kForMatchesPlayed(player1.matchesPlayed) * formatWeight;
-    const k2 = kForMatchesPlayed(player2.matchesPlayed) * formatWeight;
+    const teamAMatchesPlayed =
+      teamAStates.reduce((sum, entry) => sum + entry.state.matchesPlayed, 0) / teamAStates.length;
+    const teamBMatchesPlayed =
+      teamBStates.reduce((sum, entry) => sum + entry.state.matchesPlayed, 0) / teamBStates.length;
 
-    player1.rating = Math.max(
-      eloConfig.floor,
-      player1.rating + k1 * (score1 - expected1)
-    );
-    player2.rating = Math.max(
-      eloConfig.floor,
-      player2.rating + k2 * (score2 - expected2)
-    );
+    const teamAK = kForMatchesPlayed(teamAMatchesPlayed) * formatWeight * doublesMultiplier;
+    const teamBK = kForMatchesPlayed(teamBMatchesPlayed) * formatWeight * doublesMultiplier;
 
-    player1.matchesPlayed += 1;
-    player2.matchesPlayed += 1;
+    const deltaA = teamAK * (scoreA - expectedA);
+    const deltaB = teamBK * (scoreB - expectedB);
+
+    teamAStates.forEach(({ state }) => {
+      state.rating = Math.max(eloConfig.floor, state.rating + deltaA);
+      state.matchesPlayed += 1;
+    });
+    teamBStates.forEach(({ state }) => {
+      state.rating = Math.max(eloConfig.floor, state.rating + deltaB);
+      state.matchesPlayed += 1;
+    });
   });
 
   const ratings = new Map<string, number>();
@@ -159,14 +182,11 @@ export const calculateEloRatings = (
 
 export type EloMatchState = {
   matchId: string;
-  player1Id: string;
-  player2Id: string;
-  pre1: number;
-  pre2: number;
-  preMatches1: number;
-  preMatches2: number;
-  post1: number;
-  post2: number;
+  teamAIds: string[];
+  teamBIds: string[];
+  preRatings: Record<string, number>;
+  preMatches: Record<string, number>;
+  postRatings: Record<string, number>;
 };
 
 export const calculateEloMatchStates = (
@@ -202,42 +222,78 @@ export const calculateEloMatchStates = (
       return;
     }
 
-    const player1 = ensureState(match.player1_id);
-    const player2 = ensureState(match.player2_id);
+    const teamA = match.team_a ?? [];
+    const teamB = match.team_b ?? [];
+    if (!teamA.length || !teamB.length) {
+      return;
+    }
 
-    const pre1 = player1.rating;
-    const pre2 = player2.rating;
-    const preMatches1 = player1.matchesPlayed;
-    const preMatches2 = player2.matchesPlayed;
+    const teamAStates = teamA.map((playerId) => ({
+      id: playerId,
+      state: ensureState(playerId)
+    }));
+    const teamBStates = teamB.map((playerId) => ({
+      id: playerId,
+      state: ensureState(playerId)
+    }));
 
-    const score1 = totals.p1Wins / totals.totalGames;
-    const score2 = totals.p2Wins / totals.totalGames;
-    const expected1 = expectedScore(player1.rating, player2.rating);
-    const expected2 = 1 - expected1;
+    const preRatings: Record<string, number> = {};
+    const preMatches: Record<string, number> = {};
+    teamAStates.forEach(({ id, state }) => {
+      preRatings[id] = state.rating;
+      preMatches[id] = state.matchesPlayed;
+    });
+    teamBStates.forEach(({ id, state }) => {
+      preRatings[id] = state.rating;
+      preMatches[id] = state.matchesPlayed;
+    });
+
+    const teamARating =
+      teamAStates.reduce((sum, entry) => sum + entry.state.rating, 0) / teamAStates.length;
+    const teamBRating =
+      teamBStates.reduce((sum, entry) => sum + entry.state.rating, 0) / teamBStates.length;
+
+    const scoreA = totals.sideAWins / totals.totalGames;
+    const scoreB = totals.sideBWins / totals.totalGames;
+    const expectedA = expectedScore(teamARating, teamBRating);
+    const expectedB = 1 - expectedA;
     const formatWeight = resolveFormatWeight(match.match_format);
+    const doublesMultiplier = match.match_type === 'doubles' ? eloConfig.doublesMultiplier : 1;
 
-    const k1 = kForMatchesPlayed(player1.matchesPlayed) * formatWeight;
-    const k2 = kForMatchesPlayed(player2.matchesPlayed) * formatWeight;
+    const teamAMatchesPlayed =
+      teamAStates.reduce((sum, entry) => sum + entry.state.matchesPlayed, 0) / teamAStates.length;
+    const teamBMatchesPlayed =
+      teamBStates.reduce((sum, entry) => sum + entry.state.matchesPlayed, 0) / teamBStates.length;
 
-    const next1 = Math.max(eloConfig.floor, player1.rating + k1 * (score1 - expected1));
-    const next2 = Math.max(eloConfig.floor, player2.rating + k2 * (score2 - expected2));
+    const teamAK = kForMatchesPlayed(teamAMatchesPlayed) * formatWeight * doublesMultiplier;
+    const teamBK = kForMatchesPlayed(teamBMatchesPlayed) * formatWeight * doublesMultiplier;
+
+    const deltaA = teamAK * (scoreA - expectedA);
+    const deltaB = teamBK * (scoreB - expectedB);
+
+    const postRatings: Record<string, number> = {};
+
+    teamAStates.forEach(({ id, state }) => {
+      const next = Math.max(eloConfig.floor, state.rating + deltaA);
+      postRatings[id] = next;
+      state.rating = next;
+      state.matchesPlayed += 1;
+    });
+    teamBStates.forEach(({ id, state }) => {
+      const next = Math.max(eloConfig.floor, state.rating + deltaB);
+      postRatings[id] = next;
+      state.rating = next;
+      state.matchesPlayed += 1;
+    });
 
     entries.push({
       matchId: match.id,
-      player1Id: match.player1_id,
-      player2Id: match.player2_id,
-      pre1,
-      pre2,
-      preMatches1,
-      preMatches2,
-      post1: next1,
-      post2: next2
+      teamAIds: teamA,
+      teamBIds: teamB,
+      preRatings,
+      preMatches,
+      postRatings
     });
-
-    player1.rating = next1;
-    player2.rating = next2;
-    player1.matchesPlayed += 1;
-    player2.matchesPlayed += 1;
   });
 
   return entries;
@@ -281,31 +337,55 @@ export const calculateEloDeltasForPlayer = (
       return;
     }
 
-    const player1 = ensureState(match.player1_id);
-    const player2 = ensureState(match.player2_id);
-
-    const score1 = totals.p1Wins / totals.totalGames;
-    const score2 = totals.p2Wins / totals.totalGames;
-    const expected1 = expectedScore(player1.rating, player2.rating);
-    const expected2 = 1 - expected1;
-    const formatWeight = resolveFormatWeight(match.match_format);
-
-    const k1 = kForMatchesPlayed(player1.matchesPlayed) * formatWeight;
-    const k2 = kForMatchesPlayed(player2.matchesPlayed) * formatWeight;
-
-    const next1 = Math.max(eloConfig.floor, player1.rating + k1 * (score1 - expected1));
-    const next2 = Math.max(eloConfig.floor, player2.rating + k2 * (score2 - expected2));
-
-    if (match.player1_id === playerId) {
-      deltas.set(match.id, next1 - player1.rating);
-    } else if (match.player2_id === playerId) {
-      deltas.set(match.id, next2 - player2.rating);
+    const teamA = match.team_a ?? [];
+    const teamB = match.team_b ?? [];
+    if (!teamA.length || !teamB.length) {
+      return;
     }
 
-    player1.rating = next1;
-    player2.rating = next2;
-    player1.matchesPlayed += 1;
-    player2.matchesPlayed += 1;
+    const teamAStates = teamA.map((id) => ({ id, state: ensureState(id) }));
+    const teamBStates = teamB.map((id) => ({ id, state: ensureState(id) }));
+
+    const teamARating =
+      teamAStates.reduce((sum, entry) => sum + entry.state.rating, 0) / teamAStates.length;
+    const teamBRating =
+      teamBStates.reduce((sum, entry) => sum + entry.state.rating, 0) / teamBStates.length;
+
+    const scoreA = totals.sideAWins / totals.totalGames;
+    const scoreB = totals.sideBWins / totals.totalGames;
+    const expectedA = expectedScore(teamARating, teamBRating);
+    const expectedB = 1 - expectedA;
+    const formatWeight = resolveFormatWeight(match.match_format);
+    const doublesMultiplier = match.match_type === 'doubles' ? eloConfig.doublesMultiplier : 1;
+
+    const teamAMatchesPlayed =
+      teamAStates.reduce((sum, entry) => sum + entry.state.matchesPlayed, 0) / teamAStates.length;
+    const teamBMatchesPlayed =
+      teamBStates.reduce((sum, entry) => sum + entry.state.matchesPlayed, 0) / teamBStates.length;
+
+    const teamAK = kForMatchesPlayed(teamAMatchesPlayed) * formatWeight * doublesMultiplier;
+    const teamBK = kForMatchesPlayed(teamBMatchesPlayed) * formatWeight * doublesMultiplier;
+
+    const deltaA = teamAK * (scoreA - expectedA);
+    const deltaB = teamBK * (scoreB - expectedB);
+
+    teamAStates.forEach(({ id, state }) => {
+      const next = Math.max(eloConfig.floor, state.rating + deltaA);
+      if (id === playerId) {
+        deltas.set(match.id, next - state.rating);
+      }
+      state.rating = next;
+      state.matchesPlayed += 1;
+    });
+
+    teamBStates.forEach(({ id, state }) => {
+      const next = Math.max(eloConfig.floor, state.rating + deltaB);
+      if (id === playerId) {
+        deltas.set(match.id, next - state.rating);
+      }
+      state.rating = next;
+      state.matchesPlayed += 1;
+    });
   });
 
   return deltas;

@@ -4,11 +4,10 @@ import { useRoute, useRouter } from 'vue-router';
 import { getProfileById, listProfiles } from '../lib/data/profiles';
 import { listMatches } from '../lib/data/matches';
 import { listGamesByMatchIds } from '../lib/data/games';
-import type { GameRow, MatchRow, ProfileRow } from '../lib/data/types';
+import type { GameRow, MatchRow, MatchType, ProfileRow } from '../lib/data/types';
 import {
   buildMatchGameTotals,
   calculateEloDeltasForPlayer,
-  calculateEloMatchStates,
   calculateEloRatings
 } from '../lib/elo';
 import { eloConfig } from '../config/eloConfig';
@@ -26,17 +25,28 @@ const gamesByFormat: Record<MatchRow['match_format'], number> = {
 const resolveMaxGames = (format: MatchRow['match_format']) => gamesByFormat[format] ?? 3;
 
 const isDeuceGame = (game: GameRow) => {
-  const minScore = Math.min(game.player1_score, game.player2_score);
-  const maxScore = Math.max(game.player1_score, game.player2_score);
+  const minScore = Math.min(game.side_a_score, game.side_b_score);
+  const maxScore = Math.max(game.side_a_score, game.side_b_score);
   return minScore >= 10 && maxScore - minScore === 2;
 };
 
 type OpponentSummary = {
   id: string;
+  label: string;
   wins: number;
   losses: number;
   matches: number;
   winPct: number;
+};
+
+type PartnerSummary = {
+  id: string;
+  name: string;
+  matches: number;
+  wins: number;
+  losses: number;
+  winPct: number;
+  avgPointDiff: number;
 };
 
 type RecentMatchSummary = {
@@ -78,6 +88,8 @@ const tabs: Array<{ id: TabId; label: string }> = [
 
 const activeTab = ref<TabId>('overview');
 const dateFilter = ref<DateFilterOption>('all');
+const matchType = ref<MatchType>('doubles');
+const isDoubles = computed(() => matchType.value === 'doubles');
 
 const loading = ref(false);
 const error = ref<string | null>(null);
@@ -111,6 +123,39 @@ const resolveOpponentName = (id: string) => {
 
 const playerDisplayName = computed(() => profile.value?.display_name?.trim() || 'Player');
 const playerUsername = computed(() => profile.value?.username?.trim() || '');
+
+const resolveTeamIds = (match: MatchRow, side: 'A' | 'B') =>
+  side === 'A' ? match.team_a ?? [] : match.team_b ?? [];
+
+const resolvePlayerSide = (match: MatchRow, playerId: string) => {
+  const teamA = match.team_a ?? [];
+  if (teamA.includes(playerId)) {
+    return 'A' as const;
+  }
+  const teamB = match.team_b ?? [];
+  if (teamB.includes(playerId)) {
+    return 'B' as const;
+  }
+  return null;
+};
+
+const resolveOpponentTeamIds = (match: MatchRow, playerId: string) => {
+  const side = resolvePlayerSide(match, playerId);
+  if (side === 'A') {
+    return resolveTeamIds(match, 'B');
+  }
+  if (side === 'B') {
+    return resolveTeamIds(match, 'A');
+  }
+  return [];
+};
+
+const formatTeamLabel = (ids: string[]) => {
+  const labels = ids.map((id) => resolveOpponentName(id)).filter(Boolean);
+  return labels.length ? labels.join(' & ') : 'Unknown team';
+};
+
+const buildTeamKey = (ids: string[]) => ids.slice().sort().join('|');
 
 const compareMatches = (a: MatchRow, b: MatchRow) => {
   if (a.match_date !== b.match_date) {
@@ -240,6 +285,13 @@ const stats = computed(() => {
       winsLast10: 0,
       bestOpponent: null as OpponentSummary | null,
       worstOpponent: null as OpponentSummary | null,
+      partnerSummaries: [] as PartnerSummary[],
+      mostFrequentPartner: null as PartnerSummary | null,
+      bestPartner: null as PartnerSummary | null,
+      worstPartner: null as PartnerSummary | null,
+      mostSuccessfulPartner: null as PartnerSummary | null,
+      positivePartners: [] as PartnerSummary[],
+      negativePartners: [] as PartnerSummary[],
       recentMatches: [] as RecentMatchSummary[],
       recentOutcomes: [] as RecentOutcome[],
       eloSeries: [] as EloPoint[],
@@ -261,8 +313,6 @@ const stats = computed(() => {
   const totalsByMatch = buildMatchGameTotals(matchList, games.value);
   const seededPlayerIds = profiles.value.map((player) => player.id);
   const eloByPlayer = calculateEloRatings(matchList, totalsByMatch, seededPlayerIds);
-  const eloMatchStates = calculateEloMatchStates(matchList, totalsByMatch, seededPlayerIds);
-  const eloStateByMatchId = new Map(eloMatchStates.map((state) => [state.matchId, state]));
   const matchCountsByPlayer = new Map<string, number>();
   const gamesByMatchId = new Map<string, GameRow[]>();
 
@@ -271,8 +321,11 @@ const stats = computed(() => {
     if (!totals || totals.totalGames <= 0) {
       return;
     }
-    matchCountsByPlayer.set(match.player1_id, (matchCountsByPlayer.get(match.player1_id) ?? 0) + 1);
-    matchCountsByPlayer.set(match.player2_id, (matchCountsByPlayer.get(match.player2_id) ?? 0) + 1);
+    const teamA = match.team_a ?? [];
+    const teamB = match.team_b ?? [];
+    [...teamA, ...teamB].forEach((playerId) => {
+      matchCountsByPlayer.set(playerId, (matchCountsByPlayer.get(playerId) ?? 0) + 1);
+    });
   });
 
   games.value.forEach((game) => {
@@ -284,9 +337,7 @@ const stats = computed(() => {
     }
   });
   gamesByMatchId.forEach((list) => list.sort((a, b) => a.game_number - b.game_number));
-  const targetMatches = matchList.filter(
-    (match) => match.player1_id === targetId || match.player2_id === targetId
-  );
+  const targetMatches = matchList.filter((match) => Boolean(resolvePlayerSide(match, targetId)));
   const orderedTargetMatches = [...targetMatches].sort(compareMatches);
 
   let matchesPlayed = 0;
@@ -316,6 +367,7 @@ const stats = computed(() => {
     string,
     {
       id: string;
+      label: string;
       wins: number;
       losses: number;
       matches: number;
@@ -325,7 +377,16 @@ const stats = computed(() => {
       pointsAgainst: number;
     }
   >();
-  const opponentStrength = new Map<string, { maxElo: number; minElo: number }>();
+  const partnerMap = new Map<
+    string,
+    {
+      id: string;
+      matches: number;
+      wins: number;
+      losses: number;
+      pointDiffTotal: number;
+    }
+  >();
 
   const results: Array<{
     match: MatchRow;
@@ -342,11 +403,15 @@ const stats = computed(() => {
       return;
     }
 
-    const isPlayer1 = match.player1_id === targetId;
-    const matchWins = isPlayer1 ? totals.p1Wins : totals.p2Wins;
-    const matchLosses = isPlayer1 ? totals.p2Wins : totals.p1Wins;
-    const matchPointsFor = isPlayer1 ? totals.p1Points : totals.p2Points;
-    const matchPointsAgainst = isPlayer1 ? totals.p2Points : totals.p1Points;
+    const side = resolvePlayerSide(match, targetId);
+    if (!side) {
+      return;
+    }
+    const isSideA = side === 'A';
+    const matchWins = isSideA ? totals.sideAWins : totals.sideBWins;
+    const matchLosses = isSideA ? totals.sideBWins : totals.sideAWins;
+    const matchPointsFor = isSideA ? totals.sideAPoints : totals.sideBPoints;
+    const matchPointsAgainst = isSideA ? totals.sideBPoints : totals.sideAPoints;
 
     matchesPlayed += 1;
     gamesWon += matchWins;
@@ -395,9 +460,9 @@ const stats = computed(() => {
     const matchGames = gamesByMatchId.get(match.id);
     if (matchGames && matchGames.length) {
       const firstGame = matchGames[0];
-      const firstGameWon = isPlayer1
-        ? firstGame.player1_score > firstGame.player2_score
-        : firstGame.player2_score > firstGame.player1_score;
+      const firstGameWon = isSideA
+        ? firstGame.side_a_score > firstGame.side_b_score
+        : firstGame.side_b_score > firstGame.side_a_score;
       if (outcome === 'W' && !firstGameWon) {
         comebackWins += 1;
       }
@@ -410,23 +475,29 @@ const stats = computed(() => {
           return;
         }
         deuceGames += 1;
-        const deuceWin = isPlayer1
-          ? game.player1_score > game.player2_score
-          : game.player2_score > game.player1_score;
+        const deuceWin = isSideA
+          ? game.side_a_score > game.side_b_score
+          : game.side_b_score > game.side_a_score;
         if (deuceWin) {
           deuceWins += 1;
         }
-        const margin = isPlayer1
-          ? game.player1_score - game.player2_score
-          : game.player2_score - game.player1_score;
+        const margin = isSideA
+          ? game.side_a_score - game.side_b_score
+          : game.side_b_score - game.side_a_score;
         deuceMarginTotal += margin;
       });
     }
 
-    const opponentId = isPlayer1 ? match.player2_id : match.player1_id;
+    const opponentIds = resolveOpponentTeamIds(match, targetId);
+    const opponentKey =
+      opponentIds.length <= 1 ? opponentIds[0] ?? 'unknown' : buildTeamKey(opponentIds);
+    const opponentSingleId = opponentIds[0] ?? '';
+    const opponentLabel =
+      opponentIds.length <= 1 ? resolveOpponentName(opponentSingleId) : formatTeamLabel(opponentIds);
     const record =
-      opponentMap.get(opponentId) ?? {
-        id: opponentId,
+      opponentMap.get(opponentKey) ?? {
+        id: opponentKey,
+        label: opponentLabel,
         wins: 0,
         losses: 0,
         matches: 0,
@@ -447,22 +518,30 @@ const stats = computed(() => {
     record.pointsFor += matchPointsFor;
     record.pointsAgainst += matchPointsAgainst;
 
-    opponentMap.set(opponentId, record);
+    opponentMap.set(opponentKey, record);
 
-    const eloState = eloStateByMatchId.get(match.id);
-    if (eloState) {
-      const opponentElo = isPlayer1 ? eloState.pre2 : eloState.pre1;
-      const opponentPreMatches = isPlayer1 ? eloState.preMatches2 : eloState.preMatches1;
-      if (opponentPreMatches < MIN_MATCHES_FOR_ELO_DISPLAY) {
-        return;
-      }
-      const strength = opponentStrength.get(opponentId) ?? {
-        maxElo: opponentElo,
-        minElo: opponentElo
-      };
-      strength.maxElo = Math.max(strength.maxElo, opponentElo);
-      strength.minElo = Math.min(strength.minElo, opponentElo);
-      opponentStrength.set(opponentId, strength);
+    if (isDoubles.value) {
+      const teamIds = resolveTeamIds(match, side);
+      teamIds
+        .filter((id) => id !== targetId)
+        .forEach((partnerId) => {
+          const partner =
+            partnerMap.get(partnerId) ?? {
+              id: partnerId,
+              matches: 0,
+              wins: 0,
+              losses: 0,
+              pointDiffTotal: 0
+            };
+          partner.matches += 1;
+          if (outcome === 'W') {
+            partner.wins += 1;
+          } else {
+            partner.losses += 1;
+          }
+          partner.pointDiffTotal += pointDiff;
+          partnerMap.set(partnerId, partner);
+        });
     }
   });
 
@@ -516,6 +595,7 @@ const stats = computed(() => {
 
   const opponentSummaries: OpponentSummary[] = Array.from(opponentMap.values()).map((record) => ({
     id: record.id,
+    label: record.label,
     wins: record.wins,
     losses: record.losses,
     matches: record.matches,
@@ -523,27 +603,19 @@ const stats = computed(() => {
   }));
 
   const bestOpponent = opponentSummaries.reduce<OpponentSummary | null>((best, current) => {
-    const currentStrength = opponentStrength.get(current.id);
-    if (!currentStrength) {
-      return best;
-    }
     if (!best) {
       return current;
     }
-    const bestStrength = opponentStrength.get(best.id);
-    if (!bestStrength) {
+    if (current.winPct > best.winPct) {
       return current;
     }
-    if (currentStrength.maxElo > bestStrength.maxElo) {
-      return current;
-    }
-    if (currentStrength.maxElo === bestStrength.maxElo && current.matches > best.matches) {
+    if (current.winPct === best.winPct && current.matches > best.matches) {
       return current;
     }
     if (
-      currentStrength.maxElo === bestStrength.maxElo &&
+      current.winPct === best.winPct &&
       current.matches === best.matches &&
-      current.id < best.id
+      current.label < best.label
     ) {
       return current;
     }
@@ -551,32 +623,111 @@ const stats = computed(() => {
   }, null);
 
   const worstOpponent = opponentSummaries.reduce<OpponentSummary | null>((worst, current) => {
-    const currentStrength = opponentStrength.get(current.id);
-    if (!currentStrength) {
-      return worst;
-    }
     if (!worst) {
       return current;
     }
-    const worstStrength = opponentStrength.get(worst.id);
-    if (!worstStrength) {
+    if (current.winPct < worst.winPct) {
       return current;
     }
-    if (currentStrength.minElo < worstStrength.minElo) {
-      return current;
-    }
-    if (currentStrength.minElo === worstStrength.minElo && current.matches > worst.matches) {
+    if (current.winPct === worst.winPct && current.matches > worst.matches) {
       return current;
     }
     if (
-      currentStrength.minElo === worstStrength.minElo &&
+      current.winPct === worst.winPct &&
       current.matches === worst.matches &&
-      current.id < worst.id
+      current.label < worst.label
     ) {
       return current;
     }
     return worst;
   }, null);
+
+  const partnerSummaries: PartnerSummary[] = Array.from(partnerMap.values()).map((record) => ({
+    id: record.id,
+    name: resolveOpponentName(record.id),
+    matches: record.matches,
+    wins: record.wins,
+    losses: record.losses,
+    winPct: record.matches ? record.wins / record.matches : 0,
+    avgPointDiff: record.matches ? record.pointDiffTotal / record.matches : 0
+  }));
+
+  const mostFrequentPartner = partnerSummaries.reduce<PartnerSummary | null>(
+    (best, current) => {
+      if (!best) {
+        return current;
+      }
+      if (current.matches > best.matches) {
+        return current;
+      }
+      if (current.matches === best.matches && current.name < best.name) {
+        return current;
+      }
+      return best;
+    },
+    null
+  );
+
+  const bestPartner = partnerSummaries.reduce<PartnerSummary | null>((best, current) => {
+    if (!best) {
+      return current;
+    }
+    if (current.winPct > best.winPct) {
+      return current;
+    }
+    if (current.winPct === best.winPct && current.matches > best.matches) {
+      return current;
+    }
+    if (current.winPct === best.winPct && current.matches === best.matches && current.name < best.name) {
+      return current;
+    }
+    return best;
+  }, null);
+
+  const worstPartner = partnerSummaries.reduce<PartnerSummary | null>(
+    (worst, current) => {
+      if (!worst) {
+        return current;
+      }
+      if (current.winPct < worst.winPct) {
+        return current;
+      }
+      if (current.winPct === worst.winPct && current.matches > worst.matches) {
+        return current;
+      }
+      if (current.winPct === worst.winPct && current.matches === worst.matches && current.name < worst.name) {
+        return current;
+      }
+      return worst;
+    },
+    null
+  );
+
+  const mostSuccessfulPartner = partnerSummaries.reduce<PartnerSummary | null>(
+    (best, current) => {
+      if (!best) {
+        return current;
+      }
+      if (current.avgPointDiff > best.avgPointDiff) {
+        return current;
+      }
+      if (current.avgPointDiff === best.avgPointDiff && current.matches > best.matches) {
+        return current;
+      }
+      if (
+        current.avgPointDiff === best.avgPointDiff &&
+        current.matches === best.matches &&
+        current.name < best.name
+      ) {
+        return current;
+      }
+      return best;
+    },
+    null
+  );
+
+  const positivePartners = partnerSummaries.filter((partner) => partner.winPct > winPct);
+  const negativePartners = partnerSummaries.filter((partner) => partner.winPct < winPct);
 
   const hasElo = matchesPlayed >= MIN_MATCHES_FOR_ELO_DISPLAY;
   const deltas = hasElo
@@ -628,13 +779,18 @@ const stats = computed(() => {
     .reverse()
     .slice(0, 5)
     .map((entry) => {
+      const opponentIds = resolveOpponentTeamIds(entry.match, targetId);
+      const opponentSingleId = opponentIds[0] ?? '';
       const opponentId =
-        entry.match.player1_id === targetId ? entry.match.player2_id : entry.match.player1_id;
+        opponentIds.length <= 1 ? opponentSingleId || 'unknown' : buildTeamKey(opponentIds);
       return {
         id: entry.match.id,
         date: formatDate(entry.match.match_date),
         opponentId,
-        opponentName: resolveOpponentName(opponentId),
+        opponentName:
+          opponentIds.length <= 1
+            ? resolveOpponentName(opponentSingleId)
+            : formatTeamLabel(opponentIds),
         outcome: entry.outcome,
         score: `${entry.wins}-${entry.losses}`
       };
@@ -691,6 +847,13 @@ const stats = computed(() => {
     winsLast10,
     bestOpponent,
     worstOpponent,
+    partnerSummaries,
+    mostFrequentPartner,
+    bestPartner,
+    worstPartner,
+    mostSuccessfulPartner,
+    positivePartners,
+    negativePartners,
     recentMatches,
     recentOutcomes,
     eloSeries,
@@ -746,6 +909,9 @@ const opponentMetaLabel = (summary: OpponentSummary | null) => {
   if (!summary) {
     return '';
   }
+  if (summary.id.includes('|') || isDoubles.value) {
+    return `${summary.wins}-${summary.losses}`;
+  }
   const matchesPlayed = stats.value.matchCountsByPlayer.get(summary.id) ?? 0;
   if (matchesPlayed < MIN_MATCHES_FOR_ELO_DISPLAY) {
     return `Elo - · ${summary.wins}-${summary.losses}`;
@@ -769,7 +935,7 @@ const overviewTiles = computed<StatTile[]>(() => {
     ? stats.value.decidingGameWins / stats.value.decidingMatches
     : 0;
 
-  return [
+  const tiles: StatTile[] = [
     {
       label: 'Matches played',
       value: formatNumber(stats.value.matchesPlayed)
@@ -804,17 +970,65 @@ const overviewTiles = computed<StatTile[]>(() => {
     },
     {
       label: 'Best opponent',
-      value: best ? resolveOpponentName(best.id) : '-'
+      value: best ? best.label : '-',
+      meta: opponentMetaLabel(best)
     },
     {
       label: 'Worst opponent',
-      value: worst ? resolveOpponentName(worst.id) : '-'
+      value: worst ? worst.label : '-',
+      meta: opponentMetaLabel(worst)
     },
     {
       label: 'Last match',
       value: stats.value.lastMatchDate || '-'
     }
   ];
+ 
+  if (isDoubles.value) {
+    const mostFrequent = stats.value.mostFrequentPartner;
+    const bestPartner = stats.value.bestPartner;
+    const worstPartner = stats.value.worstPartner;
+    const mostSuccessful = stats.value.mostSuccessfulPartner;
+    const positiveNames = stats.value.positivePartners.length
+      ? stats.value.positivePartners.map((partner) => partner.name).join(', ')
+      : '-';
+    const negativeNames = stats.value.negativePartners.length
+      ? stats.value.negativePartners.map((partner) => partner.name).join(', ')
+      : '-';
+
+    tiles.push(
+      {
+        label: 'Most frequent partner',
+        value: mostFrequent ? mostFrequent.name : '-',
+        meta: mostFrequent ? `${mostFrequent.matches} matches` : undefined
+      },
+      {
+        label: 'Best partner',
+        value: bestPartner ? bestPartner.name : '-',
+        meta: bestPartner ? `Win ${formatPct(bestPartner.winPct, bestPartner.matches)}` : undefined
+      },
+      {
+        label: 'Worst partner',
+        value: worstPartner ? worstPartner.name : '-',
+        meta: worstPartner ? `Win ${formatPct(worstPartner.winPct, worstPartner.matches)}` : undefined
+      },
+      {
+        label: 'Most successful partnership',
+        value: mostSuccessful ? mostSuccessful.name : '-',
+        meta: mostSuccessful ? `Avg ${formatSigned(mostSuccessful.avgPointDiff, 1)} pts` : undefined
+      },
+      {
+        label: 'Positive diff partners',
+        value: positiveNames
+      },
+      {
+        label: 'Negative diff partners',
+        value: negativeNames
+      }
+    );
+  }
+
+  return tiles;
 });
 
 const matchesSummaryTiles = computed<StatTile[]>(() => {
@@ -1060,7 +1274,7 @@ const loadData = async () => {
     }
     profiles.value = profilesResult.data ?? [];
 
-    const matchesResult = await listMatches({ includeInactive: false });
+    const matchesResult = await listMatches({ includeInactive: false, matchType: matchType.value });
     if (matchesResult.error) {
       error.value = matchesResult.error;
       loading.value = false;
@@ -1102,6 +1316,13 @@ watch(
     loadData();
   }
 );
+
+watch(matchType, () => {
+  if (!targetPlayerId.value) {
+    return;
+  }
+  loadData();
+});
 </script>
 
 <template>
@@ -1118,6 +1339,28 @@ watch(
     </header>
 
     <div class="profile-filters">
+      <div class="mode-toggle auth-toggle" role="tablist" aria-label="Match type">
+        <button
+          type="button"
+          class="auth-toggle__btn"
+          :class="{ 'is-active': matchType === 'doubles' }"
+          role="tab"
+          :aria-selected="matchType === 'doubles'"
+          @click="matchType = 'doubles'"
+        >
+          Doubles
+        </button>
+        <button
+          type="button"
+          class="auth-toggle__btn"
+          :class="{ 'is-active': matchType === 'singles' }"
+          role="tab"
+          :aria-selected="matchType === 'singles'"
+          @click="matchType = 'singles'"
+        >
+          Singles
+        </button>
+      </div>
       <label class="field">
         <span>Stats range</span>
         <select v-model="dateFilter">
@@ -1345,9 +1588,14 @@ watch(
 }
 
 .profile-filters {
-  display: grid;
-  gap: var(--space-xs);
-  max-width: 240px;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: var(--space-sm);
+}
+
+.profile-filters .field {
+  min-width: 180px;
 }
 
 .profile-filters__hint {

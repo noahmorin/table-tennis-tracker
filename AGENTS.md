@@ -185,6 +185,7 @@ Delete (soft) rules:
 
 ## 11. Database (Supabase Postgres) - current state summary
 Dump snapshot: 2026-01-30
+Full schema reference: `DATABASE.md`.
 
 ### 11.1 Tables
 - `profiles`

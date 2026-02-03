@@ -23,5 +23,6 @@ export const eloConfig = {
   kMax: readEnvNumber('VITE_ELO_K_MAX', 72),
   kMin: readEnvNumber('VITE_ELO_K_MIN', 24),
   halfLife: readEnvNumber('VITE_ELO_HALF_LIFE', 20),
+  doublesMultiplier: readEnvNumber('VITE_ELO_DOUBLES_MULTIPLIER', 0.8),
   formatWeights
 };
