@@ -5,6 +5,7 @@ import { Settings, LogOut } from 'lucide-vue-next';
 import BottomNav from './components/BottomNav.vue';
 import { appConfig } from './config/appConfig';
 import { useAuth } from './stores/auth';
+import { createBugReport } from './lib/data/bugReports';
 
 const { appName, leagueLabel } = appConfig;
 const { isAuthenticated, profile, user, signOut } = useAuth();
@@ -19,6 +20,12 @@ const themeColorKey = 'ttt-theme-color';
 const theme = ref<ThemeMode | null>(null);
 const themeColor = ref<ThemeColor>('green');
 const dialogRef = ref<HTMLDialogElement | null>(null);
+const bugDialogRef = ref<HTMLDialogElement | null>(null);
+const bugTitle = ref('');
+const bugDescription = ref('');
+const bugSubmitting = ref(false);
+const bugError = ref<string | null>(null);
+const bugSuccess = ref<string | null>(null);
 
 const isDark = computed(() => theme.value === 'dark');
 const activeThemeLabel = computed(() => (isDark.value ? 'Dark' : 'Light'));
@@ -80,6 +87,64 @@ const openThemeDialog = () => {
 
 const closeThemeDialog = () => {
   dialogRef.value?.close();
+};
+
+const resetBugForm = () => {
+  bugTitle.value = '';
+  bugDescription.value = '';
+  bugError.value = null;
+  bugSuccess.value = null;
+};
+
+const openBugDialog = () => {
+  if (!isAuthenticated.value) {
+    bugError.value = 'You must be signed in to submit a bug report.';
+    return;
+  }
+  resetBugForm();
+  closeThemeDialog();
+  bugDialogRef.value?.showModal();
+};
+
+const closeBugDialog = () => {
+  bugDialogRef.value?.close();
+};
+
+const buildBugDescription = (details: string) => {
+  if (typeof window === 'undefined') {
+    return details;
+  }
+  const page = window.location.href;
+  return `${details}\n\n---\nPage: ${page}\nVersion: ${appVersion}`;
+};
+
+const handleBugSubmit = async () => {
+  bugError.value = null;
+  bugSuccess.value = null;
+
+  const title = bugTitle.value.trim();
+  const details = bugDescription.value.trim();
+
+  if (!title || !details) {
+    bugError.value = 'Summary and details are required.';
+    return;
+  }
+
+  bugSubmitting.value = true;
+  const { error } = await createBugReport({
+    title,
+    description: buildBugDescription(details)
+  });
+  bugSubmitting.value = false;
+
+  if (error) {
+    bugError.value = error;
+    return;
+  }
+
+  bugSuccess.value = 'Bug report submitted. Thank you!';
+  bugTitle.value = '';
+  bugDescription.value = '';
 };
 
 const setTheme = (value: ThemeMode) => {
@@ -179,6 +244,15 @@ onMounted(() => {
         </div>
       </div>
 
+      <div class="theme-dialog__section">
+        <h3 class="theme-dialog__section-title">Support</h3>
+        <p class="theme-dialog__hint">Spot a bug or glitch? Send a quick report.</p>
+        <button v-if="isAuthenticated" class="ghost-btn" type="button" @click="openBugDialog">
+          Report a bug
+        </button>
+        <p v-else class="theme-dialog__hint">Sign in to submit bug reports.</p>
+      </div>
+
       <div v-if="isAuthenticated" class="theme-dialog__section theme-dialog__actions">
         <h3 class="theme-dialog__section-title">Account</h3>
         <button class="ghost-btn ghost-btn--danger" type="button" @click="handleSignOut">
@@ -188,6 +262,42 @@ onMounted(() => {
       </div>
 
       <p class="theme-dialog__hint theme-dialog__version">Version {{ appVersion }}</p>
+    </form>
+  </dialog>
+
+  <dialog ref="bugDialogRef" class="bug-dialog" @close="resetBugForm">
+    <form method="dialog" class="bug-dialog__card" @submit.prevent="handleBugSubmit">
+      <header class="bug-dialog__header">
+        <h2>Report a bug</h2>
+        <button type="button" class="bug-dialog__close" @click="closeBugDialog">X</button>
+      </header>
+      <p class="bug-dialog__copy">Tell us what broke and how we can reproduce it.</p>
+
+      <div class="bug-dialog__body">
+        <label class="field">
+          <span>Summary</span>
+          <input v-model="bugTitle" type="text" maxlength="120" placeholder="Short description" />
+        </label>
+        <label class="field">
+          <span>Details</span>
+          <textarea
+            v-model="bugDescription"
+            rows="5"
+            placeholder="Steps to reproduce, expected vs actual"
+          ></textarea>
+        </label>
+        <p class="bug-dialog__hint">We automatically attach the page URL and app version.</p>
+      </div>
+
+      <div class="bug-dialog__actions">
+        <button type="button" class="ghost-btn" @click="closeBugDialog">Cancel</button>
+        <button class="primary-btn" type="submit" :disabled="bugSubmitting">
+          {{ bugSubmitting ? 'Sending...' : 'Send report' }}
+        </button>
+      </div>
+
+      <p v-if="bugSuccess" class="form-message is-success">{{ bugSuccess }}</p>
+      <p v-if="bugError" class="form-message is-error">{{ bugError }}</p>
     </form>
   </dialog>
 </template>

@@ -79,6 +79,22 @@ export type AuditLogRow = {
   created_by: string;
 };
 
+export type BugReportRow = {
+  id: string;
+  title: string;
+  description: string;
+  is_active: boolean;
+  created_at: DbTimestamp;
+  created_by: string;
+  updated_at: DbTimestamp | null;
+  updated_by: string | null;
+};
+
+export type BugReportInput = {
+  title: string;
+  description: string;
+};
+
 export type GameInput = {
   game_number: number;
   side_a_score: number;
