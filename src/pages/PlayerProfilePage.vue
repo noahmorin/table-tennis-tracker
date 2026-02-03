@@ -16,6 +16,20 @@ import { eloConfig } from '../config/eloConfig';
 type TabId = 'overview' | 'matches' | 'elo' | 'streaks' | 'points';
 type DateFilterOption = 'all' | '30' | '60' | '90';
 const MIN_MATCHES_FOR_ELO_DISPLAY = 3;
+const gamesByFormat: Record<MatchRow['match_format'], number> = {
+  bo1: 1,
+  bo3: 3,
+  bo5: 5,
+  bo7: 7
+};
+
+const resolveMaxGames = (format: MatchRow['match_format']) => gamesByFormat[format] ?? 3;
+
+const isDeuceGame = (game: GameRow) => {
+  const minScore = Math.min(game.player1_score, game.player2_score);
+  const maxScore = Math.max(game.player1_score, game.player2_score);
+  return minScore >= 10 && maxScore - minScore === 2;
+};
 
 type OpponentSummary = {
   id: string;
@@ -43,6 +57,12 @@ type EloPoint = {
 type RecentOutcome = {
   outcome: 'W' | 'L';
   date: string;
+};
+
+type StatTile = {
+  label: string;
+  value: string;
+  meta?: string;
 };
 
 const route = useRoute();
@@ -188,22 +208,36 @@ const stats = computed(() => {
       winPct: 0,
       gamesWon: 0,
       gamesLost: 0,
+      gamesDiff: 0,
       gamesWinPct: 0,
+      straightGameWins: 0,
+      decidingGameWins: 0,
+      decidingGameLosses: 0,
+      decidingMatches: 0,
+      comebackWins: 0,
+      blownLeads: 0,
       pointsFor: 0,
       pointsAgainst: 0,
       pointDiff: 0,
       avgPointDiffPerGame: Number.NaN,
       avgPointDiffPerMatch: Number.NaN,
       avgMarginVictory: Number.NaN,
+      avgMarginLoss: Number.NaN,
       avgPointsForPerGame: Number.NaN,
       avgPointsAgainstPerGame: Number.NaN,
       maxPointDiff: Number.NaN,
-      maxPointsFor: Number.NaN,
-      maxPointsAgainst: Number.NaN,
+      bestWinMargin: Number.NaN,
+      worstLossMargin: Number.NaN,
+      deuceGames: 0,
+      deuceWins: 0,
       currentStreakType: null as 'W' | 'L' | null,
       currentStreakCount: 0,
+      currentWinStreak: 0,
+      currentLossStreak: 0,
       longestWinStreak: 0,
       longestLossStreak: 0,
+      winsLast5: 0,
+      winsLast10: 0,
       bestOpponent: null as OpponentSummary | null,
       worstOpponent: null as OpponentSummary | null,
       recentMatches: [] as RecentMatchSummary[],
@@ -215,6 +249,10 @@ const stats = computed(() => {
       currentElo: Number.NaN,
       highestElo: Number.NaN,
       lowestElo: Number.NaN,
+      lastMatchEloChange: Number.NaN,
+      lastTenMatchEloChange: Number.NaN,
+      avgEloChange: Number.NaN,
+      totalMatchesRated: 0,
       lastMatchDate: ''
     };
   }
@@ -226,6 +264,7 @@ const stats = computed(() => {
   const eloMatchStates = calculateEloMatchStates(matchList, totalsByMatch, seededPlayerIds);
   const eloStateByMatchId = new Map(eloMatchStates.map((state) => [state.matchId, state]));
   const matchCountsByPlayer = new Map<string, number>();
+  const gamesByMatchId = new Map<string, GameRow[]>();
 
   matchList.forEach((match) => {
     const totals = totalsByMatch.get(match.id);
@@ -235,6 +274,16 @@ const stats = computed(() => {
     matchCountsByPlayer.set(match.player1_id, (matchCountsByPlayer.get(match.player1_id) ?? 0) + 1);
     matchCountsByPlayer.set(match.player2_id, (matchCountsByPlayer.get(match.player2_id) ?? 0) + 1);
   });
+
+  games.value.forEach((game) => {
+    const list = gamesByMatchId.get(game.match_id);
+    if (list) {
+      list.push(game);
+    } else {
+      gamesByMatchId.set(game.match_id, [game]);
+    }
+  });
+  gamesByMatchId.forEach((list) => list.sort((a, b) => a.game_number - b.game_number));
   const targetMatches = matchList.filter(
     (match) => match.player1_id === targetId || match.player2_id === targetId
   );
@@ -249,9 +298,19 @@ const stats = computed(() => {
   let pointsAgainst = 0;
   let totalGames = 0;
   let winPointDiffTotal = 0;
+  let lossPointDiffTotal = 0;
   let maxPointDiff = Number.NEGATIVE_INFINITY;
-  let maxPointsFor = Number.NEGATIVE_INFINITY;
-  let maxPointsAgainst = Number.NEGATIVE_INFINITY;
+  let bestWinMargin = Number.NEGATIVE_INFINITY;
+  let worstLossMargin = Number.POSITIVE_INFINITY;
+  let straightGameWins = 0;
+  let decidingGameWins = 0;
+  let decidingGameLosses = 0;
+  let decidingMatches = 0;
+  let comebackWins = 0;
+  let blownLeads = 0;
+  let deuceGames = 0;
+  let deuceWins = 0;
+  let deuceMarginTotal = 0;
 
   const opponentMap = new Map<
     string,
@@ -296,18 +355,32 @@ const stats = computed(() => {
     pointsAgainst += matchPointsAgainst;
     totalGames += totals.totalGames;
 
-    maxPointsFor = Math.max(maxPointsFor, matchPointsFor);
-    maxPointsAgainst = Math.max(maxPointsAgainst, matchPointsAgainst);
-
     const pointDiff = matchPointsFor - matchPointsAgainst;
     maxPointDiff = Math.max(maxPointDiff, pointDiff);
 
     const outcome: 'W' | 'L' = matchWins >= matchLosses ? 'W' : 'L';
+    const maxGames = resolveMaxGames(match.match_format);
+    const isDecidingMatch = totals.totalGames === maxGames;
     if (outcome === 'W') {
       wins += 1;
       winPointDiffTotal += pointDiff;
+      bestWinMargin = Math.max(bestWinMargin, pointDiff);
+      if (matchLosses === 0) {
+        straightGameWins += 1;
+      }
     } else {
       losses += 1;
+      worstLossMargin = Math.min(worstLossMargin, pointDiff);
+      lossPointDiffTotal += pointDiff;
+    }
+
+    if (isDecidingMatch) {
+      decidingMatches += 1;
+      if (outcome === 'W') {
+        decidingGameWins += 1;
+      } else {
+        decidingGameLosses += 1;
+      }
     }
 
     results.push({
@@ -318,6 +391,37 @@ const stats = computed(() => {
       pointsFor: matchPointsFor,
       pointsAgainst: matchPointsAgainst
     });
+
+    const matchGames = gamesByMatchId.get(match.id);
+    if (matchGames && matchGames.length) {
+      const firstGame = matchGames[0];
+      const firstGameWon = isPlayer1
+        ? firstGame.player1_score > firstGame.player2_score
+        : firstGame.player2_score > firstGame.player1_score;
+      if (outcome === 'W' && !firstGameWon) {
+        comebackWins += 1;
+      }
+      if (outcome === 'L' && firstGameWon) {
+        blownLeads += 1;
+      }
+
+      matchGames.forEach((game) => {
+        if (!isDeuceGame(game)) {
+          return;
+        }
+        deuceGames += 1;
+        const deuceWin = isPlayer1
+          ? game.player1_score > game.player2_score
+          : game.player2_score > game.player1_score;
+        if (deuceWin) {
+          deuceWins += 1;
+        }
+        const margin = isPlayer1
+          ? game.player1_score - game.player2_score
+          : game.player2_score - game.player1_score;
+        deuceMarginTotal += margin;
+      });
+    }
 
     const opponentId = isPlayer1 ? match.player2_id : match.player1_id;
     const record =
@@ -365,13 +469,17 @@ const stats = computed(() => {
   const winPct = matchesPlayed ? wins / matchesPlayed : 0;
   const gamesPlayed = gamesWon + gamesLost;
   const gamesWinPct = gamesPlayed ? gamesWon / gamesPlayed : 0;
+  const gamesDiff = gamesWon - gamesLost;
   const pointDiff = pointsFor - pointsAgainst;
 
   const avgPointDiffPerGame = totalGames ? pointDiff / totalGames : Number.NaN;
   const avgPointDiffPerMatch = matchesPlayed ? pointDiff / matchesPlayed : Number.NaN;
   const avgMarginVictory = wins ? winPointDiffTotal / wins : Number.NaN;
+  const avgMarginLoss = losses ? lossPointDiffTotal / losses : Number.NaN;
   const avgPointsForPerGame = totalGames ? pointsFor / totalGames : Number.NaN;
   const avgPointsAgainstPerGame = totalGames ? pointsAgainst / totalGames : Number.NaN;
+  const safeBestWinMargin = Number.isFinite(bestWinMargin) ? bestWinMargin : Number.NaN;
+  const safeWorstLossMargin = Number.isFinite(worstLossMargin) ? worstLossMargin : Number.NaN;
 
   let currentStreakType: 'W' | 'L' | null = null;
   let currentStreakCount = 0;
@@ -399,6 +507,12 @@ const stats = computed(() => {
     currentStreakType = runningType;
     currentStreakCount = runningCount;
   }
+
+  const currentWinStreak = currentStreakType === 'W' ? currentStreakCount : 0;
+  const currentLossStreak = currentStreakType === 'L' ? currentStreakCount : 0;
+  const recentResults = results.slice(-10);
+  const winsLast10 = recentResults.filter((entry) => entry.outcome === 'W').length;
+  const winsLast5 = recentResults.slice(-5).filter((entry) => entry.outcome === 'W').length;
 
   const opponentSummaries: OpponentSummary[] = Array.from(opponentMap.values()).map((record) => ({
     id: record.id,
@@ -491,6 +605,24 @@ const stats = computed(() => {
   const currentElo = eloSeries.length ? eloSeries[eloSeries.length - 1].value : Number.NaN;
   const highestElo = eloSeries.length ? Math.max(...eloSeries.map((point) => point.value)) : Number.NaN;
   const lowestElo = eloSeries.length ? Math.min(...eloSeries.map((point) => point.value)) : Number.NaN;
+  let lastMatchEloChange = Number.NaN;
+  let lastTenMatchEloChange = Number.NaN;
+  let avgEloChange = Number.NaN;
+  let totalMatchesRated = Number.NaN;
+
+  if (hasElo) {
+    const ratedTargetMatches = orderedTargetMatches
+      .map((match) => ({ match, delta: deltas.get(match.id) }))
+      .filter((entry): entry is { match: MatchRow; delta: number } => entry.delta !== undefined);
+    totalMatchesRated = ratedTargetMatches.length;
+    if (ratedTargetMatches.length) {
+      const totalDelta = ratedTargetMatches.reduce((sum, entry) => sum + entry.delta, 0);
+      avgEloChange = totalDelta / ratedTargetMatches.length;
+      lastMatchEloChange = ratedTargetMatches[ratedTargetMatches.length - 1].delta;
+      const lastTen = ratedTargetMatches.slice(-10);
+      lastTenMatchEloChange = lastTen.reduce((sum, entry) => sum + entry.delta, 0);
+    }
+  }
 
   const recentMatches: RecentMatchSummary[] = [...results]
     .reverse()
@@ -527,22 +659,36 @@ const stats = computed(() => {
     winPct,
     gamesWon,
     gamesLost,
+    gamesDiff,
     gamesWinPct,
+    straightGameWins,
+    decidingGameWins,
+    decidingGameLosses,
+    decidingMatches,
+    comebackWins,
+    blownLeads,
     pointsFor,
     pointsAgainst,
     pointDiff,
     avgPointDiffPerGame,
     avgPointDiffPerMatch,
     avgMarginVictory,
+    avgMarginLoss,
     avgPointsForPerGame,
     avgPointsAgainstPerGame,
     maxPointDiff: Number.isFinite(maxPointDiff) ? maxPointDiff : Number.NaN,
-    maxPointsFor: Number.isFinite(maxPointsFor) ? maxPointsFor : Number.NaN,
-    maxPointsAgainst: Number.isFinite(maxPointsAgainst) ? maxPointsAgainst : Number.NaN,
+    bestWinMargin: safeBestWinMargin,
+    worstLossMargin: safeWorstLossMargin,
+    deuceGames,
+    deuceWins,
     currentStreakType,
     currentStreakCount,
+    currentWinStreak,
+    currentLossStreak,
     longestWinStreak,
     longestLossStreak,
+    winsLast5,
+    winsLast10,
     bestOpponent,
     worstOpponent,
     recentMatches,
@@ -554,6 +700,10 @@ const stats = computed(() => {
     currentElo,
     highestElo,
     lowestElo,
+    lastMatchEloChange,
+    lastTenMatchEloChange,
+    avgEloChange,
+    totalMatchesRated,
     lastMatchDate
   };
 });
@@ -612,48 +762,45 @@ const heroEloLabel = computed(() => formatNumber(Math.round(stats.value.currentE
 const heroMatchesLabel = computed(() => formatNumber(stats.value.matchesPlayed));
 const hasEloForDisplay = computed(() => stats.value.matchesPlayed >= MIN_MATCHES_FOR_ELO_DISPLAY);
 
-const overviewTiles = computed(() => {
+const overviewTiles = computed<StatTile[]>(() => {
   const best = stats.value.bestOpponent;
   const worst = stats.value.worstOpponent;
-  const gamesPlayed = stats.value.gamesWon + stats.value.gamesLost;
+  const decidingWinRate = stats.value.decidingMatches
+    ? stats.value.decidingGameWins / stats.value.decidingMatches
+    : 0;
 
   return [
+    {
+      label: 'Matches played',
+      value: formatNumber(stats.value.matchesPlayed)
+    },
+    {
+      label: 'Match W-L',
+      value: heroRecordLabel.value
+    },
     {
       label: 'Win %',
       value: formatPct(stats.value.winPct, stats.value.matchesPlayed)
     },
     {
-      label: 'Games W-L',
-      value: `${stats.value.gamesWon}-${stats.value.gamesLost}`,
-      meta: formatPct(stats.value.gamesWinPct, gamesPlayed)
+      label: 'Current Elo',
+      value: formatNumber(Math.round(stats.value.currentElo))
     },
     {
-      label: 'Points for',
-      value: formatNumber(stats.value.pointsFor)
+      label: 'Peak Elo',
+      value: formatNumber(Math.round(stats.value.highestElo))
     },
     {
-      label: 'Points against',
-      value: formatNumber(stats.value.pointsAgainst)
+      label: 'Game diff',
+      value: formatSigned(stats.value.gamesDiff)
     },
     {
       label: 'Point diff',
       value: formatSigned(stats.value.pointDiff)
     },
     {
-      label: 'Avg diff / game',
-      value: formatSigned(stats.value.avgPointDiffPerGame, 1)
-    },
-    {
-      label: 'Avg diff / match',
-      value: formatSigned(stats.value.avgPointDiffPerMatch, 1)
-    },
-    {
-      label: 'Current streak',
-      value: currentStreakLabel.value
-    },
-    {
-      label: 'Longest win streak',
-      value: stats.value.longestWinStreak ? formatNumber(stats.value.longestWinStreak) : '-'
+      label: 'Deciding-game win %',
+      value: formatPct(decidingWinRate, stats.value.decidingMatches)
     },
     {
       label: 'Best opponent',
@@ -664,115 +811,175 @@ const overviewTiles = computed(() => {
       value: worst ? resolveOpponentName(worst.id) : '-'
     },
     {
-      label: 'Highest Elo',
-      value: formatNumber(Math.round(stats.value.highestElo))
-    },
-    {
-      label: 'Lowest Elo',
-      value: formatNumber(Math.round(stats.value.lowestElo))
-    },
-    {
       label: 'Last match',
       value: stats.value.lastMatchDate || '-'
     }
   ];
 });
 
-const matchesSummaryTiles = computed(() => [
-  {
-    label: 'Matches played',
-    value: formatNumber(stats.value.matchesPlayed)
-  },
-  {
-    label: 'Record',
-    value: heroRecordLabel.value
-  },
-  {
-    label: 'Win %',
-    value: formatPct(stats.value.winPct, stats.value.matchesPlayed)
-  },
-  {
-    label: 'Last match',
-    value: stats.value.lastMatchDate || '-'
-  }
-]);
+const matchesSummaryTiles = computed<StatTile[]>(() => {
+  const decidingRate = stats.value.matchesPlayed
+    ? stats.value.decidingMatches / stats.value.matchesPlayed
+    : 0;
 
-const eloTiles = computed(() => [
+  return [
+    {
+      label: 'Games W-L',
+      value: `${stats.value.gamesWon}-${stats.value.gamesLost}`
+    },
+    {
+      label: 'Straight-game wins',
+      value: formatNumber(stats.value.straightGameWins)
+    },
+    {
+      label: 'Deciding-game wins',
+      value: formatNumber(stats.value.decidingGameWins)
+    },
+    {
+      label: 'Deciding-game losses',
+      value: formatNumber(stats.value.decidingGameLosses)
+    },
+    {
+      label: 'Deciding-game rate',
+      value: formatPct(decidingRate, stats.value.matchesPlayed)
+    },
+    {
+      label: 'Comeback wins',
+      value: formatNumber(stats.value.comebackWins)
+    },
+    {
+      label: 'Blown leads',
+      value: formatNumber(stats.value.blownLeads)
+    }
+  ];
+});
+
+const eloTiles = computed<StatTile[]>(() => [
   {
     label: 'Current Elo',
     value: formatNumber(Math.round(stats.value.currentElo))
   },
   {
-    label: 'Highest Elo',
+    label: 'Peak Elo',
     value: formatNumber(Math.round(stats.value.highestElo))
   },
   {
     label: 'Lowest Elo',
     value: formatNumber(Math.round(stats.value.lowestElo))
+  },
+  {
+    label: 'Elo change (last match)',
+    value: formatSigned(stats.value.lastMatchEloChange, 1)
+  },
+  {
+    label: 'Elo change (last 10)',
+    value: formatSigned(stats.value.lastTenMatchEloChange, 1)
+  },
+  {
+    label: 'Avg Elo change / match',
+    value: formatSigned(stats.value.avgEloChange, 1)
+  },
+  {
+    label: 'Matches rated',
+    value: formatNumber(stats.value.totalMatchesRated)
   }
 ]);
 
-const streakTiles = computed(() => [
+const streakTiles = computed<StatTile[]>(() => [
   {
     label: 'Current streak',
     value: currentStreakLabel.value
+  },
+  {
+    label: 'Current win streak',
+    value: stats.value.currentWinStreak ? formatNumber(stats.value.currentWinStreak) : '-'
+  },
+  {
+    label: 'Current losing streak',
+    value: stats.value.currentLossStreak ? formatNumber(stats.value.currentLossStreak) : '-'
   },
   {
     label: 'Longest win streak',
     value: stats.value.longestWinStreak ? formatNumber(stats.value.longestWinStreak) : '-'
   },
   {
-    label: 'Longest loss streak',
+    label: 'Longest losing streak',
     value: stats.value.longestLossStreak ? formatNumber(stats.value.longestLossStreak) : '-'
+  },
+  {
+    label: 'Wins (last 5)',
+    value: formatNumber(stats.value.winsLast5)
+  },
+  {
+    label: 'Wins (last 10)',
+    value: formatNumber(stats.value.winsLast10)
   }
 ]);
 
-const pointsTiles = computed(() => [
-  {
-    label: 'Points for',
-    value: formatNumber(stats.value.pointsFor)
-  },
-  {
-    label: 'Points against',
-    value: formatNumber(stats.value.pointsAgainst)
-  },
-  {
-    label: 'Point diff',
-    value: formatSigned(stats.value.pointDiff)
-  },
-  {
-    label: 'Avg points for / game',
-    value: formatNumber(stats.value.avgPointsForPerGame, 1)
-  },
-  {
-    label: 'Avg points against / game',
-    value: formatNumber(stats.value.avgPointsAgainstPerGame, 1)
-  },
-  {
-    label: 'Avg diff / game',
-    value: formatSigned(stats.value.avgPointDiffPerGame, 1)
-  },
-  {
-    label: 'Avg diff / match',
-    value: formatSigned(stats.value.avgPointDiffPerMatch, 1)
-  },
-  {
-    label: 'Avg margin (wins)',
-    value: formatSigned(stats.value.avgMarginVictory, 1)
-  },
-  {
-    label: 'Best point margin',
-    value: formatSigned(stats.value.maxPointDiff)
-  },
-  {
-    label: 'Most points (match)',
-    value: formatNumber(stats.value.maxPointsFor)
-  },
-  {
-    label: 'Most allowed (match)',
-    value: formatNumber(stats.value.maxPointsAgainst)
-  }
-]);
+  const pointsTiles = computed<StatTile[]>(() => {
+  const gamesPlayed = stats.value.gamesWon + stats.value.gamesLost;
+  const deuceRate = gamesPlayed ? stats.value.deuceGames / gamesPlayed : 0;
+  const deuceWinRate = stats.value.deuceGames ? stats.value.deuceWins / stats.value.deuceGames : 0;
+
+  return [
+    {
+      label: 'Points won',
+      value: formatNumber(stats.value.pointsFor)
+    },
+    {
+      label: 'Points lost',
+      value: formatNumber(stats.value.pointsAgainst)
+    },
+    {
+      label: 'Point diff',
+      value: formatSigned(stats.value.pointDiff)
+    },
+    {
+      label: 'Avg points won / game',
+      value: formatNumber(stats.value.avgPointsForPerGame, 1)
+    },
+    {
+      label: 'Avg points lost / game',
+      value: formatNumber(stats.value.avgPointsAgainstPerGame, 1)
+    },
+    {
+      label: 'Avg point margin / game',
+      value: formatSigned(stats.value.avgPointDiffPerGame, 1)
+    },
+    {
+      label: 'Avg point margin / match',
+      value: formatSigned(stats.value.avgPointDiffPerMatch, 1)
+    },
+    {
+      label: 'Avg margin (wins)',
+      value: formatSigned(stats.value.avgMarginVictory, 1)
+    },
+    {
+      label: 'Avg margin (losses)',
+      value: formatSigned(stats.value.avgMarginLoss, 1)
+    },
+    {
+      label: 'Deuce games',
+      value: formatNumber(stats.value.deuceGames)
+    },
+    {
+      label: 'Deuce rate',
+      value: formatPct(deuceRate, gamesPlayed)
+    },
+    {
+      label: 'Deuce win rate',
+      value: formatPct(deuceWinRate, stats.value.deuceGames)
+    },
+    {
+      label: 'Best win margin',
+      value: formatSigned(stats.value.bestWinMargin)
+    },
+    {
+      label: 'Worst loss margin',
+      value: formatSigned(stats.value.worstLossMargin)
+    }
+  ];
+});
 
 const sparkline = computed(() => {
   const series = stats.value.eloSeries;
@@ -1028,7 +1235,7 @@ watch(
               <span class="elo-chart__range">Elo values</span>
             </div>
 
-            <div v-if="!hasEloForDisplay" class="form-message">Elo appears after 3 games.</div>
+            <div v-if="!hasEloForDisplay" class="form-message">Elo appears after 3 matches.</div>
 
             <div v-else-if="!sparkline" class="form-message">Not enough matches to plot Elo yet.</div>
 
