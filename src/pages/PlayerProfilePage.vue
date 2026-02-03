@@ -4,13 +4,14 @@ import { useRoute, useRouter } from 'vue-router';
 import { getProfileById, listProfiles } from '../lib/data/profiles';
 import { listMatches } from '../lib/data/matches';
 import { listGamesByMatchIds } from '../lib/data/games';
-import type { GameRow, MatchRow, MatchType, ProfileRow } from '../lib/data/types';
+import type { GameRow, MatchRow, ProfileRow } from '../lib/data/types';
 import {
   buildMatchGameTotals,
   calculateEloDeltasForPlayer,
   calculateEloRatings
 } from '../lib/elo';
 import { eloConfig } from '../config/eloConfig';
+import { useMatchMode } from '../stores/matchMode';
 
 type TabId = 'overview' | 'matches' | 'elo' | 'streaks' | 'points';
 type DateFilterOption = 'all' | '30' | '60' | '90';
@@ -88,8 +89,7 @@ const tabs: Array<{ id: TabId; label: string }> = [
 
 const activeTab = ref<TabId>('overview');
 const dateFilter = ref<DateFilterOption>('all');
-const matchType = ref<MatchType>('doubles');
-const isDoubles = computed(() => matchType.value === 'doubles');
+const { matchMode, isDoubles, setMatchMode } = useMatchMode();
 
 const loading = ref(false);
 const error = ref<string | null>(null);
@@ -1274,7 +1274,7 @@ const loadData = async () => {
     }
     profiles.value = profilesResult.data ?? [];
 
-    const matchesResult = await listMatches({ includeInactive: false, matchType: matchType.value });
+    const matchesResult = await listMatches({ includeInactive: false, matchType: matchMode.value });
     if (matchesResult.error) {
       error.value = matchesResult.error;
       loading.value = false;
@@ -1317,7 +1317,7 @@ watch(
   }
 );
 
-watch(matchType, () => {
+watch(matchMode, () => {
   if (!targetPlayerId.value) {
     return;
   }
@@ -1343,20 +1343,20 @@ watch(matchType, () => {
         <button
           type="button"
           class="auth-toggle__btn"
-          :class="{ 'is-active': matchType === 'doubles' }"
+          :class="{ 'is-active': matchMode === 'doubles' }"
           role="tab"
-          :aria-selected="matchType === 'doubles'"
-          @click="matchType = 'doubles'"
+          :aria-selected="matchMode === 'doubles'"
+          @click="setMatchMode('doubles')"
         >
           Doubles
         </button>
         <button
           type="button"
           class="auth-toggle__btn"
-          :class="{ 'is-active': matchType === 'singles' }"
+          :class="{ 'is-active': matchMode === 'singles' }"
           role="tab"
-          :aria-selected="matchType === 'singles'"
-          @click="matchType = 'singles'"
+          :aria-selected="matchMode === 'singles'"
+          @click="setMatchMode('singles')"
         >
           Singles
         </button>

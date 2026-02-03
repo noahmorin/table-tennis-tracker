@@ -5,8 +5,9 @@ import type { ColDef, GridOptions } from 'ag-grid-community';
 import { listMatches } from '../lib/data/matches';
 import { listGamesByMatchIds } from '../lib/data/games';
 import { listProfiles } from '../lib/data/profiles';
-import type { MatchRow, GameRow, MatchType, ProfileRow } from '../lib/data/types';
+import type { MatchRow, GameRow, ProfileRow } from '../lib/data/types';
 import { buildMatchGameTotals, calculateEloRatings } from '../lib/elo';
+import { useMatchMode } from '../stores/matchMode';
 import 'ag-grid-community/styles/ag-grid.css';
 import 'ag-grid-community/styles/ag-theme-quartz.css';
 
@@ -29,7 +30,7 @@ const loading = ref(false);
 const error = ref<string | null>(null);
 const rows = ref<LeaderRow[]>([]);
 const searchTerm = ref('');
-const matchType = ref<MatchType>('doubles');
+const { matchMode, setMatchMode } = useMatchMode();
 
 const formatPlayerLabel = (player: ProfileRow) => {
   const base = player.display_name?.trim() || player.username;
@@ -165,7 +166,7 @@ const loadLeaderboard = async () => {
 
     const { data: matchesData, error: matchesError } = await listMatches({
       includeInactive: false,
-      matchType: matchType.value
+      matchType: matchMode.value
     });
     if (matchesError) {
       error.value = matchesError;
@@ -341,7 +342,7 @@ onMounted(() => {
   loadLeaderboard();
 });
 
-watch(matchType, () => {
+watch(matchMode, () => {
   loadLeaderboard();
 });
 </script>
@@ -358,20 +359,20 @@ watch(matchType, () => {
         <button
           type="button"
           class="auth-toggle__btn"
-          :class="{ 'is-active': matchType === 'doubles' }"
+          :class="{ 'is-active': matchMode === 'doubles' }"
           role="tab"
-          :aria-selected="matchType === 'doubles'"
-          @click="matchType = 'doubles'"
+          :aria-selected="matchMode === 'doubles'"
+          @click="setMatchMode('doubles')"
         >
           Doubles
         </button>
         <button
           type="button"
           class="auth-toggle__btn"
-          :class="{ 'is-active': matchType === 'singles' }"
+          :class="{ 'is-active': matchMode === 'singles' }"
           role="tab"
-          :aria-selected="matchType === 'singles'"
-          @click="matchType = 'singles'"
+          :aria-selected="matchMode === 'singles'"
+          @click="setMatchMode('singles')"
         >
           Singles
         </button>

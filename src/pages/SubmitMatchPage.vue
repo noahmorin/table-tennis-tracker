@@ -4,8 +4,9 @@ import { AgGridVue } from 'ag-grid-vue3';
 import type { ColDef, CellValueChangedEvent, GridApi, GridOptions, GridReadyEvent } from 'ag-grid-community';
 import { listProfiles } from '../lib/data/profiles';
 import { createMatch } from '../lib/data/matches';
-import type { CompetitionType, GameInput, MatchFormat, MatchType, ProfileRow } from '../lib/data/types';
+import type { CompetitionType, GameInput, MatchFormat, ProfileRow } from '../lib/data/types';
 import { useAuth } from '../stores/auth';
+import { useMatchMode } from '../stores/matchMode';
 import 'ag-grid-community/styles/ag-grid.css';
 import 'ag-grid-community/styles/ag-theme-quartz.css';
 
@@ -19,7 +20,7 @@ const todayString = () => {
   return `${year}-${month}-${day}`;
 };
 
-const matchType = ref<MatchType>('doubles');
+const { matchMode, isDoubles, setMatchMode } = useMatchMode();
 const matchDate = ref(todayString());
 const matchFormat = ref<MatchFormat>('bo3');
 const competitionType = ref<CompetitionType>('ranked');
@@ -103,7 +104,6 @@ const playerLabelForId = (id: string) => {
   return player ? formatPlayerLabel(player) : '';
 };
 
-const isDoubles = computed(() => matchType.value === 'doubles');
 
 const teamAIds = computed(() => {
   const ids = [teamAPlayer1Id.value];
@@ -156,7 +156,6 @@ const resetMessages = () => {
 };
 
 const resetForm = () => {
-  matchType.value = 'doubles';
   matchDate.value = todayString();
   matchFormat.value = 'bo3';
   syncGameRows(gamesByFormat.bo3);
@@ -393,7 +392,7 @@ const handleSubmit = async () => {
 
   submitting.value = true;
   const { error } = await createMatch({
-    matchType: matchType.value,
+    matchType: matchMode.value,
     matchDate: matchDate.value,
     matchFormat: matchFormat.value,
     competitionType: competitionType.value,
@@ -506,7 +505,7 @@ watch([teamAPlayer1Id, teamAPlayer2Id, teamBPlayer1Id, teamBPlayer2Id], () => {
   gridApi.value?.refreshHeader();
 });
 
-watch(matchType, (next) => {
+watch(matchMode, (next) => {
   if (next === 'singles') {
     teamAPlayer2Id.value = '';
     teamBPlayer2Id.value = '';
@@ -549,20 +548,20 @@ onMounted(() => {
         <button
           type="button"
           class="auth-toggle__btn"
-          :class="{ 'is-active': matchType === 'doubles' }"
+          :class="{ 'is-active': matchMode === 'doubles' }"
           role="tab"
-          :aria-selected="matchType === 'doubles'"
-          @click="matchType = 'doubles'"
+          :aria-selected="matchMode === 'doubles'"
+          @click="setMatchMode('doubles')"
         >
           Doubles
         </button>
         <button
           type="button"
           class="auth-toggle__btn"
-          :class="{ 'is-active': matchType === 'singles' }"
+          :class="{ 'is-active': matchMode === 'singles' }"
           role="tab"
-          :aria-selected="matchType === 'singles'"
-          @click="matchType = 'singles'"
+          :aria-selected="matchMode === 'singles'"
+          @click="setMatchMode('singles')"
         >
           Singles
         </button>

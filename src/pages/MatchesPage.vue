@@ -9,6 +9,7 @@ import { listProfiles } from '../lib/data/profiles';
 import type { GameInput, MatchFormat, MatchRow, MatchType, ProfileRow } from '../lib/data/types';
 import { buildMatchGameTotals, calculateEloDeltasForPlayer, type MatchGameTotals } from '../lib/elo';
 import { useAuth } from '../stores/auth';
+import { useMatchMode } from '../stores/matchMode';
 import 'ag-grid-community/styles/ag-grid.css';
 import 'ag-grid-community/styles/ag-theme-quartz.css';
 
@@ -62,7 +63,7 @@ const sortOrder = ref<SortOption | ''>('date_desc');
 const opponentId = ref('');
 const filterWins = ref(true);
 const filterLosses = ref(true);
-const matchType = ref<MatchType>('doubles');
+const { matchMode, setMatchMode } = useMatchMode();
 
 const matches = ref<MatchRow[]>([]);
 const matchesLoading = ref(false);
@@ -470,7 +471,7 @@ const loadMatches = async () => {
     const { data, error } = await listMatches({
       includeInactive: isAdmin.value ? includeInactive.value : false,
       playerId: targetPlayerId.value,
-      matchType: matchType.value,
+      matchType: matchMode.value,
       dateFrom: dateFrom.value || undefined,
       dateTo: dateTo.value || undefined
     });
@@ -515,7 +516,7 @@ const loadEloDeltas = async () => {
 
   const { data: allMatches, error: matchesError } = await listMatches({
     includeInactive: false,
-    matchType: matchType.value
+    matchType: matchMode.value
   });
   if (matchesError) {
     eloDeltasByMatchId.value = new Map();
@@ -977,7 +978,7 @@ const defaultColDef: ColDef = {
 };
 
 watch(
-  [includeInactive, dateFrom, dateTo, opponentId, sortOrder, filterWins, filterLosses, matchType, profile, isAdmin],
+  [includeInactive, dateFrom, dateTo, opponentId, sortOrder, filterWins, filterLosses, matchMode, profile, isAdmin],
   () => {
     if (profile.value) {
       loadMatches();
@@ -1059,20 +1060,20 @@ onMounted(() => {
         <button
           type="button"
           class="auth-toggle__btn"
-          :class="{ 'is-active': matchType === 'doubles' }"
+          :class="{ 'is-active': matchMode === 'doubles' }"
           role="tab"
-          :aria-selected="matchType === 'doubles'"
-          @click="matchType = 'doubles'"
+          :aria-selected="matchMode === 'doubles'"
+          @click="setMatchMode('doubles')"
         >
           Doubles
         </button>
         <button
           type="button"
           class="auth-toggle__btn"
-          :class="{ 'is-active': matchType === 'singles' }"
+          :class="{ 'is-active': matchMode === 'singles' }"
           role="tab"
-          :aria-selected="matchType === 'singles'"
-          @click="matchType = 'singles'"
+          :aria-selected="matchMode === 'singles'"
+          @click="setMatchMode('singles')"
         >
           Singles
         </button>
