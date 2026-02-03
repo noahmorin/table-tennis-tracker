@@ -46,6 +46,7 @@ The app assumes a small, trusted group of users and favors clarity over heavy se
 - Leaderboard
 - Player Profile (stats + overview)
 - Player Matches
+- Update Password (from reset email)
 
 Navigation is mobile-first and optimized for quick use during a match.
 
@@ -63,6 +64,17 @@ Backend / Data:
 - Supabase (PostgreSQL + Supabase Auth)
 - No custom backend servers
 - Frontend talks directly to Supabase via the SDK
+
+---
+
+## Password reset (Supabase Auth)
+
+Add the redirect URL in Supabase Dashboard → Authentication → URL Configuration.
+Example (hash-router):
+- `https://your-site.com/#/account/update-password`
+
+Trigger reset email from the client:
+- `supabase.auth.resetPasswordForEmail(email, { redirectTo: 'https://your-site.com/#/account/update-password' })`
 
 ---
 
