@@ -12,6 +12,7 @@ export type MatchGameTotals = {
 type EloState = {
   rating: number;
   matchesPlayed: number;
+  gamesPlayed: number;
 };
 
 const compareMatches = (a: MatchRow, b: MatchRow) => {
@@ -106,7 +107,8 @@ export const calculateEloRatings = (
     }
     const state = {
       rating: eloConfig.baseline,
-      matchesPlayed: 0
+      matchesPlayed: 0,
+      gamesPlayed: 0
     };
     states.set(playerId, state);
     return state;
@@ -147,6 +149,8 @@ export const calculateEloRatings = (
 
     player1.matchesPlayed += 1;
     player2.matchesPlayed += 1;
+    player1.gamesPlayed += totals.totalGames;
+    player2.gamesPlayed += totals.totalGames;
   });
 
   const ratings = new Map<string, number>();
@@ -155,6 +159,95 @@ export const calculateEloRatings = (
   });
 
   return ratings;
+};
+
+export type EloMatchState = {
+  matchId: string;
+  player1Id: string;
+  player2Id: string;
+  pre1: number;
+  pre2: number;
+  preGames1: number;
+  preGames2: number;
+  post1: number;
+  post2: number;
+};
+
+export const calculateEloMatchStates = (
+  matches: MatchRow[],
+  matchTotals: Map<string, MatchGameTotals>,
+  seedPlayerIds: string[] = []
+): EloMatchState[] => {
+  const states = new Map<string, EloState>();
+  const entries: EloMatchState[] = [];
+
+  const ensureState = (playerId: string) => {
+    const existing = states.get(playerId);
+    if (existing) {
+      return existing;
+    }
+    const state = {
+      rating: eloConfig.baseline,
+      matchesPlayed: 0,
+      gamesPlayed: 0
+    };
+    states.set(playerId, state);
+    return state;
+  };
+
+  seedPlayerIds.forEach((playerId) => {
+    ensureState(playerId);
+  });
+
+  const orderedMatches = [...matches].sort(compareMatches);
+
+  orderedMatches.forEach((match) => {
+    const totals = matchTotals.get(match.id);
+    if (!totals || totals.totalGames <= 0) {
+      return;
+    }
+
+    const player1 = ensureState(match.player1_id);
+    const player2 = ensureState(match.player2_id);
+
+    const pre1 = player1.rating;
+    const pre2 = player2.rating;
+    const preGames1 = player1.gamesPlayed;
+    const preGames2 = player2.gamesPlayed;
+
+    const score1 = totals.p1Wins / totals.totalGames;
+    const score2 = totals.p2Wins / totals.totalGames;
+    const expected1 = expectedScore(player1.rating, player2.rating);
+    const expected2 = 1 - expected1;
+    const formatWeight = resolveFormatWeight(match.match_format);
+
+    const k1 = kForMatchesPlayed(player1.matchesPlayed) * formatWeight;
+    const k2 = kForMatchesPlayed(player2.matchesPlayed) * formatWeight;
+
+    const next1 = Math.max(eloConfig.floor, player1.rating + k1 * (score1 - expected1));
+    const next2 = Math.max(eloConfig.floor, player2.rating + k2 * (score2 - expected2));
+
+    entries.push({
+      matchId: match.id,
+      player1Id: match.player1_id,
+      player2Id: match.player2_id,
+      pre1,
+      pre2,
+      preGames1,
+      preGames2,
+      post1: next1,
+      post2: next2
+    });
+
+    player1.rating = next1;
+    player2.rating = next2;
+    player1.matchesPlayed += 1;
+    player2.matchesPlayed += 1;
+    player1.gamesPlayed += totals.totalGames;
+    player2.gamesPlayed += totals.totalGames;
+  });
+
+  return entries;
 };
 
 export const calculateEloDeltasForPlayer = (
@@ -173,7 +266,8 @@ export const calculateEloDeltasForPlayer = (
     }
     const state = {
       rating: eloConfig.baseline,
-      matchesPlayed: 0
+      matchesPlayed: 0,
+      gamesPlayed: 0
     };
     states.set(id, state);
     return state;
@@ -220,6 +314,8 @@ export const calculateEloDeltasForPlayer = (
     player2.rating = next2;
     player1.matchesPlayed += 1;
     player2.matchesPlayed += 1;
+    player1.gamesPlayed += totals.totalGames;
+    player2.gamesPlayed += totals.totalGames;
   });
 
   return deltas;

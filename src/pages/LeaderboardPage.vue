@@ -7,7 +7,6 @@ import { listGamesByMatchIds } from '../lib/data/games';
 import { listProfiles } from '../lib/data/profiles';
 import type { MatchRow, GameRow, ProfileRow } from '../lib/data/types';
 import { buildMatchGameTotals, calculateEloRatings } from '../lib/elo';
-import { eloConfig } from '../config/eloConfig';
 import 'ag-grid-community/styles/ag-grid.css';
 import 'ag-grid-community/styles/ag-theme-quartz.css';
 
@@ -15,7 +14,7 @@ type LeaderRow = {
   id: string;
   name: string;
   rank: number;
-  elo: number;
+  elo: number | null;
   matchesPlayed: number;
   wins: number;
   losses: number;
@@ -44,7 +43,7 @@ const buildLeaderboardRows = (profiles: ProfileRow[], matches: MatchRow[], games
       id: player.id,
       name: formatPlayerLabel(player),
       rank: 0,
-      elo: eloConfig.baseline,
+      elo: null,
       matchesPlayed: 0,
       wins: 0,
       losses: 0,
@@ -62,7 +61,7 @@ const buildLeaderboardRows = (profiles: ProfileRow[], matches: MatchRow[], games
         id: match.player1_id,
         name: 'Unknown player',
         rank: 0,
-        elo: eloConfig.baseline,
+        elo: null,
         matchesPlayed: 0,
         wins: 0,
         losses: 0,
@@ -78,7 +77,7 @@ const buildLeaderboardRows = (profiles: ProfileRow[], matches: MatchRow[], games
         id: match.player2_id,
         name: 'Unknown player',
         rank: 0,
-        elo: eloConfig.baseline,
+        elo: null,
         matchesPlayed: 0,
         wins: 0,
         losses: 0,
@@ -133,14 +132,19 @@ const buildLeaderboardRows = (profiles: ProfileRow[], matches: MatchRow[], games
 
   const list = Array.from(statsByPlayer.values()).map((row) => ({
     ...row,
+    elo:
+      row.setWins + row.setLosses >= 3
+        ? (eloByPlayer.get(row.id) ?? null)
+        : null,
     setDiff: row.setWins - row.setLosses,
-    winPct: row.matchesPlayed > 0 ? row.wins / row.matchesPlayed : 0,
-    elo: eloByPlayer.get(row.id) ?? row.elo
+    winPct: row.matchesPlayed > 0 ? row.wins / row.matchesPlayed : 0
   }));
 
   list.sort((a, b) => {
-    if (b.elo !== a.elo) {
-      return b.elo - a.elo;
+    const eloA = a.elo ?? Number.NEGATIVE_INFINITY;
+    const eloB = b.elo ?? Number.NEGATIVE_INFINITY;
+    if (eloB !== eloA) {
+      return eloB - eloA;
     }
     if (b.wins !== a.wins) {
       return b.wins - a.wins;
@@ -253,7 +257,13 @@ const columnDefs = computed<ColDef[]>(() => [
     maxWidth: 88,
     cellClass: 'cell-center',
     headerClass: 'cell-center',
-    valueFormatter: (params) => Math.round(params.value ?? 0).toString()
+    valueFormatter: (params) => {
+      const value = params.value;
+      if (typeof value !== 'number' || !Number.isFinite(value)) {
+        return '-';
+      }
+      return Math.round(value).toString();
+    }
   },
   {
     headerName: 'Record',

@@ -420,11 +420,22 @@ const loadEloDeltas = async () => {
   }
 
   const totals = buildMatchGameTotals(allMatches ?? [], gamesData ?? []);
-  eloDeltasByMatchId.value = calculateEloDeltasForPlayer(
-    allMatches ?? [],
-    totals,
-    targetPlayerId.value
-  );
+  const targetId = targetPlayerId.value;
+  const totalGamesPlayed = (allMatches ?? []).reduce((sum, match) => {
+    if (match.player1_id !== targetId && match.player2_id !== targetId) {
+      return sum;
+    }
+    const matchTotals = totals.get(match.id);
+    return sum + (matchTotals?.totalGames ?? 0);
+  }, 0);
+
+  if (totalGamesPlayed < 3) {
+    eloDeltasByMatchId.value = new Map();
+    eloLoading.value = false;
+    return;
+  }
+
+  eloDeltasByMatchId.value = calculateEloDeltasForPlayer(allMatches ?? [], totals, targetId);
   eloLoading.value = false;
 };
 

@@ -5,7 +5,12 @@ import { getProfileById, listProfiles } from '../lib/data/profiles';
 import { listMatches } from '../lib/data/matches';
 import { listGamesByMatchIds } from '../lib/data/games';
 import type { GameRow, MatchRow, ProfileRow } from '../lib/data/types';
-import { buildMatchGameTotals, calculateEloDeltasForPlayer, calculateEloRatings } from '../lib/elo';
+import {
+  buildMatchGameTotals,
+  calculateEloDeltasForPlayer,
+  calculateEloMatchStates,
+  calculateEloRatings
+} from '../lib/elo';
 import { eloConfig } from '../config/eloConfig';
 
 type TabId = 'overview' | 'matches' | 'elo' | 'streaks' | 'points';
@@ -205,9 +210,9 @@ const stats = computed(() => {
       eloSeries: [] as EloPoint[],
       eloDeltas: new Map<string, number>(),
       eloByPlayer: new Map<string, number>(),
-      currentElo: eloConfig.baseline,
-      highestElo: eloConfig.baseline,
-      lowestElo: eloConfig.baseline,
+      currentElo: Number.NaN,
+      highestElo: Number.NaN,
+      lowestElo: Number.NaN,
       lastMatchDate: ''
     };
   }
@@ -216,6 +221,8 @@ const stats = computed(() => {
   const totalsByMatch = buildMatchGameTotals(matchList, games.value);
   const seededPlayerIds = profiles.value.map((player) => player.id);
   const eloByPlayer = calculateEloRatings(matchList, totalsByMatch, seededPlayerIds);
+  const eloMatchStates = calculateEloMatchStates(matchList, totalsByMatch, seededPlayerIds);
+  const eloStateByMatchId = new Map(eloMatchStates.map((state) => [state.matchId, state]));
   const targetMatches = matchList.filter(
     (match) => match.player1_id === targetId || match.player2_id === targetId
   );
@@ -247,6 +254,7 @@ const stats = computed(() => {
       pointsAgainst: number;
     }
   >();
+  const opponentStrength = new Map<string, { maxElo: number; minElo: number }>();
 
   const results: Array<{
     match: MatchRow;
@@ -324,6 +332,22 @@ const stats = computed(() => {
     record.pointsAgainst += matchPointsAgainst;
 
     opponentMap.set(opponentId, record);
+
+    const eloState = eloStateByMatchId.get(match.id);
+    if (eloState) {
+      const opponentElo = isPlayer1 ? eloState.pre2 : eloState.pre1;
+      const opponentPreGames = isPlayer1 ? eloState.preGames2 : eloState.preGames1;
+      if (opponentPreGames < 3) {
+        return;
+      }
+      const strength = opponentStrength.get(opponentId) ?? {
+        maxElo: opponentElo,
+        minElo: opponentElo
+      };
+      strength.maxElo = Math.max(strength.maxElo, opponentElo);
+      strength.minElo = Math.min(strength.minElo, opponentElo);
+      opponentStrength.set(opponentId, strength);
+    }
   });
 
   const winPct = matchesPlayed ? wins / matchesPlayed : 0;
@@ -373,56 +397,88 @@ const stats = computed(() => {
   }));
 
   const bestOpponent = opponentSummaries.reduce<OpponentSummary | null>((best, current) => {
+    const currentStrength = opponentStrength.get(current.id);
+    if (!currentStrength) {
+      return best;
+    }
     if (!best) {
       return current;
     }
-    if (current.winPct > best.winPct) {
+    const bestStrength = opponentStrength.get(best.id);
+    if (!bestStrength) {
       return current;
     }
-    if (current.winPct === best.winPct && current.matches > best.matches) {
+    if (currentStrength.maxElo > bestStrength.maxElo) {
+      return current;
+    }
+    if (currentStrength.maxElo === bestStrength.maxElo && current.matches > best.matches) {
+      return current;
+    }
+    if (
+      currentStrength.maxElo === bestStrength.maxElo &&
+      current.matches === best.matches &&
+      current.id < best.id
+    ) {
       return current;
     }
     return best;
   }, null);
 
   const worstOpponent = opponentSummaries.reduce<OpponentSummary | null>((worst, current) => {
+    const currentStrength = opponentStrength.get(current.id);
+    if (!currentStrength) {
+      return worst;
+    }
     if (!worst) {
       return current;
     }
-    if (current.winPct < worst.winPct) {
+    const worstStrength = opponentStrength.get(worst.id);
+    if (!worstStrength) {
       return current;
     }
-    if (current.winPct === worst.winPct && current.matches > worst.matches) {
+    if (currentStrength.minElo < worstStrength.minElo) {
+      return current;
+    }
+    if (currentStrength.minElo === worstStrength.minElo && current.matches > worst.matches) {
+      return current;
+    }
+    if (
+      currentStrength.minElo === worstStrength.minElo &&
+      current.matches === worst.matches &&
+      current.id < worst.id
+    ) {
       return current;
     }
     return worst;
   }, null);
 
-  const deltas = calculateEloDeltasForPlayer(matchList, totalsByMatch, targetId);
+  const hasElo = gamesPlayed >= 3;
+  const deltas = hasElo
+    ? calculateEloDeltasForPlayer(matchList, totalsByMatch, targetId)
+    : new Map<string, number>();
   let rating = eloConfig.baseline;
   const eloSeries: EloPoint[] = [];
-  const orderedAllMatches = [...matchList].sort(compareMatches);
 
-  orderedAllMatches.forEach((match) => {
-    const delta = deltas.get(match.id);
-    if (delta === undefined) {
-      return;
-    }
-    rating += delta;
-    eloSeries.push({
-      matchId: match.id,
-      date: match.match_date,
-      value: rating
+  if (hasElo) {
+    const orderedAllMatches = [...matchList].sort(compareMatches);
+
+    orderedAllMatches.forEach((match) => {
+      const delta = deltas.get(match.id);
+      if (delta === undefined) {
+        return;
+      }
+      rating += delta;
+      eloSeries.push({
+        matchId: match.id,
+        date: match.match_date,
+        value: rating
+      });
     });
-  });
+  }
 
-  const currentElo = eloSeries.length ? eloSeries[eloSeries.length - 1].value : eloConfig.baseline;
-  const highestElo = eloSeries.length
-    ? Math.max(...eloSeries.map((point) => point.value))
-    : eloConfig.baseline;
-  const lowestElo = eloSeries.length
-    ? Math.min(...eloSeries.map((point) => point.value))
-    : eloConfig.baseline;
+  const currentElo = eloSeries.length ? eloSeries[eloSeries.length - 1].value : Number.NaN;
+  const highestElo = eloSeries.length ? Math.max(...eloSeries.map((point) => point.value)) : Number.NaN;
+  const lowestElo = eloSeries.length ? Math.min(...eloSeries.map((point) => point.value)) : Number.NaN;
 
   const recentMatches: RecentMatchSummary[] = [...results]
     .reverse()
@@ -537,6 +593,7 @@ const opponentMetaLabel = (summary: OpponentSummary | null) => {
 const heroRecordLabel = computed(() => `${stats.value.wins}-${stats.value.losses}`);
 const heroEloLabel = computed(() => formatNumber(Math.round(stats.value.currentElo)));
 const heroMatchesLabel = computed(() => formatNumber(stats.value.matchesPlayed));
+const hasEloForDisplay = computed(() => stats.value.gamesWon + stats.value.gamesLost >= 3);
 
 const overviewTiles = computed(() => {
   const best = stats.value.bestOpponent;
@@ -954,7 +1011,9 @@ watch(
               <span class="elo-chart__range">Elo values</span>
             </div>
 
-            <div v-if="!sparkline" class="form-message">Not enough matches to plot Elo yet.</div>
+            <div v-if="!hasEloForDisplay" class="form-message">Elo appears after 3 games.</div>
+
+            <div v-else-if="!sparkline" class="form-message">Not enough matches to plot Elo yet.</div>
 
             <div v-else class="elo-chart__frame">
               <div class="elo-axis elo-axis--y">
