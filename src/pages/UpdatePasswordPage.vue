@@ -40,10 +40,10 @@ const clearAuthHash = () => {
     return;
   }
   const hash = window.location.hash || '';
-  const tokenMarker = '#access_token=';
-  const markerIndex = hash.indexOf(tokenMarker);
-  const cleanedHash = markerIndex >= 0 ? hash.slice(0, markerIndex) : hash;
-  const fallbackHash = cleanedHash || '#/account/update-password';
+  if (!hash.includes('access_token=')) {
+    return;
+  }
+  const fallbackHash = '#/account/update-password';
   const nextUrl = `${window.location.pathname}${window.location.search}${fallbackHash}`;
   window.history.replaceState(null, '', nextUrl);
 };

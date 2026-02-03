@@ -11,6 +11,7 @@ const routes = [
   { path: '/', redirect: '/leaderboard' },
   { path: '/login', component: LoginPage, meta: { public: true } },
   { path: '/account/update-password', component: UpdatePasswordPage, meta: { public: true } },
+  { path: '/access_token=:token(.*)', component: UpdatePasswordPage, meta: { public: true } },
   { path: '/submit-match', component: SubmitMatchPage, meta: { requiresAuth: true } },
   { path: '/leaderboard', component: LeaderboardPage, meta: { requiresAuth: true } },
   { path: '/players/:id', component: PlayerProfilePage, props: true, meta: { requiresAuth: true } },
