@@ -19,9 +19,9 @@ type LeaderRow = {
   wins: number;
   losses: number;
   winPct: number;
-  setWins: number;
-  setLosses: number;
-  setDiff: number;
+  gamesWon: number;
+  gamesLost: number;
+  gamesDiff: number;
   pointsFor: number;
 };
 
@@ -48,9 +48,9 @@ const buildLeaderboardRows = (profiles: ProfileRow[], matches: MatchRow[], games
       wins: 0,
       losses: 0,
       winPct: 0,
-      setWins: 0,
-      setLosses: 0,
-      setDiff: 0,
+      gamesWon: 0,
+      gamesLost: 0,
+      gamesDiff: 0,
       pointsFor: 0
     });
   });
@@ -66,9 +66,9 @@ const buildLeaderboardRows = (profiles: ProfileRow[], matches: MatchRow[], games
         wins: 0,
         losses: 0,
         winPct: 0,
-        setWins: 0,
-        setLosses: 0,
-        setDiff: 0,
+        gamesWon: 0,
+        gamesLost: 0,
+        gamesDiff: 0,
         pointsFor: 0
       });
     }
@@ -82,9 +82,9 @@ const buildLeaderboardRows = (profiles: ProfileRow[], matches: MatchRow[], games
         wins: 0,
         losses: 0,
         winPct: 0,
-        setWins: 0,
-        setLosses: 0,
-        setDiff: 0,
+        gamesWon: 0,
+        gamesLost: 0,
+        gamesDiff: 0,
         pointsFor: 0
       });
     }
@@ -107,10 +107,10 @@ const buildLeaderboardRows = (profiles: ProfileRow[], matches: MatchRow[], games
     player1.matchesPlayed += 1;
     player2.matchesPlayed += 1;
 
-    player1.setWins += totals.p1Wins;
-    player1.setLosses += totals.p2Wins;
-    player2.setWins += totals.p2Wins;
-    player2.setLosses += totals.p1Wins;
+    player1.gamesWon += totals.p1Wins;
+    player1.gamesLost += totals.p2Wins;
+    player2.gamesWon += totals.p2Wins;
+    player2.gamesLost += totals.p1Wins;
 
     player1.pointsFor += totals.p1Points;
     player2.pointsFor += totals.p2Points;
@@ -133,10 +133,10 @@ const buildLeaderboardRows = (profiles: ProfileRow[], matches: MatchRow[], games
   const list = Array.from(statsByPlayer.values()).map((row) => ({
     ...row,
     elo:
-      row.setWins + row.setLosses >= 3
+      row.matchesPlayed >= 3
         ? (eloByPlayer.get(row.id) ?? null)
         : null,
-    setDiff: row.setWins - row.setLosses,
+    gamesDiff: row.gamesWon - row.gamesLost,
     winPct: row.matchesPlayed > 0 ? row.wins / row.matchesPlayed : 0
   }));
 
@@ -149,8 +149,8 @@ const buildLeaderboardRows = (profiles: ProfileRow[], matches: MatchRow[], games
     if (b.wins !== a.wins) {
       return b.wins - a.wins;
     }
-    if (b.setDiff !== a.setDiff) {
-      return b.setDiff - a.setDiff;
+    if (b.gamesDiff !== a.gamesDiff) {
+      return b.gamesDiff - a.gamesDiff;
     }
     if (b.pointsFor !== a.pointsFor) {
       return b.pointsFor - a.pointsFor;
@@ -315,9 +315,9 @@ const columnDefs = computed<ColDef[]>(() => [
     headerClass: 'cell-center'
   },
   {
-    headerName: 'Set W',
-    field: 'setWins',
-    colId: 'setWins',
+    headerName: 'Game W',
+    field: 'gamesWon',
+    colId: 'gamesWon',
     width: 66,
     minWidth: 58,
     maxWidth: 78,
@@ -325,9 +325,9 @@ const columnDefs = computed<ColDef[]>(() => [
     headerClass: 'cell-center'
   },
   {
-    headerName: 'Set L',
-    field: 'setLosses',
-    colId: 'setLosses',
+    headerName: 'Game L',
+    field: 'gamesLost',
+    colId: 'gamesLost',
     width: 66,
     minWidth: 58,
     maxWidth: 78,
@@ -335,9 +335,9 @@ const columnDefs = computed<ColDef[]>(() => [
     headerClass: 'cell-center'
   },
   {
-    headerName: 'Set +/-',
-    field: 'setDiff',
-    colId: 'setDiff',
+    headerName: 'Game +/-',
+    field: 'gamesDiff',
+    colId: 'gamesDiff',
     width: 72,
     minWidth: 64,
     maxWidth: 86,

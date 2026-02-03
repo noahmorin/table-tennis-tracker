@@ -45,7 +45,7 @@ const formatOptions: Array<{ value: MatchFormat; label: string }> = [
   { value: 'bo7', label: 'Best of 7' }
 ];
 
-const setsByFormat: Record<MatchFormat, number> = {
+const gamesByFormat: Record<MatchFormat, number> = {
   bo1: 1,
   bo3: 3,
   bo5: 5,
@@ -287,7 +287,7 @@ const matchEloDeltaClass = (match: MatchRow) => {
 };
 
 const maxMatchDate = computed(() => todayString());
-const editSetCount = computed(() => setsByFormat[editMatchFormat.value]);
+const editGameCount = computed(() => gamesByFormat[editMatchFormat.value]);
 const canEditPlayers = computed(() => isAdmin.value);
 const canEditDate = computed(() => isAdmin.value);
 const canVoid = computed(() => isAdmin.value);
@@ -421,15 +421,18 @@ const loadEloDeltas = async () => {
 
   const totals = buildMatchGameTotals(allMatches ?? [], gamesData ?? []);
   const targetId = targetPlayerId.value;
-  const totalGamesPlayed = (allMatches ?? []).reduce((sum, match) => {
+  const totalMatchesPlayed = (allMatches ?? []).reduce((sum, match) => {
     if (match.player1_id !== targetId && match.player2_id !== targetId) {
       return sum;
     }
     const matchTotals = totals.get(match.id);
-    return sum + (matchTotals?.totalGames ?? 0);
+    if (!matchTotals || matchTotals.totalGames <= 0) {
+      return sum;
+    }
+    return sum + 1;
   }, 0);
 
-  if (totalGamesPlayed < 3) {
+  if (totalMatchesPlayed < 3) {
     eloDeltasByMatchId.value = new Map();
     eloLoading.value = false;
     return;
@@ -447,7 +450,7 @@ const openMatchDialog = async (match: MatchRow) => {
   editMatchDate.value = match.match_date;
   editMatchFormat.value = match.match_format;
   editNotes.value = match.notes ?? '';
-  syncEditRows(setsByFormat[editMatchFormat.value]);
+  syncEditRows(gamesByFormat[editMatchFormat.value]);
   dialogRef.value?.showModal();
 
   editLoading.value = true;
@@ -455,7 +458,7 @@ const openMatchDialog = async (match: MatchRow) => {
   if (error) {
     editError.value = error;
   } else {
-    hydrateEditRows(setsByFormat[editMatchFormat.value], data ?? []);
+    hydrateEditRows(gamesByFormat[editMatchFormat.value], data ?? []);
   }
   editLoading.value = false;
 };
@@ -533,7 +536,7 @@ const validateEditMatch = () => {
   let matchDecided = false;
   let foundGap = false;
 
-  for (let i = 1; i <= editSetCount.value; i += 1) {
+  for (let i = 1; i <= editGameCount.value; i += 1) {
     const row = editRows.value[i - 1] ?? buildGameRow(i);
     const score1 = parseScore(row.player1Score);
     const score2 = parseScore(row.player2Score);
@@ -634,7 +637,10 @@ const validateEditMatch = () => {
       wins2 += 1;
     }
 
-    if (wins1 >= Math.floor(editSetCount.value / 2) + 1 || wins2 >= Math.floor(editSetCount.value / 2) + 1) {
+    if (
+      wins1 >= Math.floor(editGameCount.value / 2) + 1 ||
+      wins2 >= Math.floor(editGameCount.value / 2) + 1
+    ) {
       matchDecided = true;
     }
   }
@@ -643,7 +649,10 @@ const validateEditMatch = () => {
     errors.push('At least one game is required.');
   }
 
-  if (wins1 < Math.floor(editSetCount.value / 2) + 1 && wins2 < Math.floor(editSetCount.value / 2) + 1) {
+  if (
+    wins1 < Math.floor(editGameCount.value / 2) + 1 &&
+    wins2 < Math.floor(editGameCount.value / 2) + 1
+  ) {
     errors.push(`Match is incomplete for ${editMatchFormat.value}.`);
   }
 
@@ -844,7 +853,7 @@ watch([editPlayer1Id, editPlayer2Id], () => {
 });
 
 watch(editMatchFormat, (next) => {
-  syncEditRows(setsByFormat[next]);
+  syncEditRows(gamesByFormat[next]);
   if (editValidationErrors.value.length || Object.keys(editCellErrors.value).length) {
     editValidationErrors.value = [];
     editCellErrors.value = {};

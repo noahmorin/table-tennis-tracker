@@ -12,7 +12,6 @@ export type MatchGameTotals = {
 type EloState = {
   rating: number;
   matchesPlayed: number;
-  gamesPlayed: number;
 };
 
 const compareMatches = (a: MatchRow, b: MatchRow) => {
@@ -108,7 +107,6 @@ export const calculateEloRatings = (
     const state = {
       rating: eloConfig.baseline,
       matchesPlayed: 0,
-      gamesPlayed: 0
     };
     states.set(playerId, state);
     return state;
@@ -149,8 +147,6 @@ export const calculateEloRatings = (
 
     player1.matchesPlayed += 1;
     player2.matchesPlayed += 1;
-    player1.gamesPlayed += totals.totalGames;
-    player2.gamesPlayed += totals.totalGames;
   });
 
   const ratings = new Map<string, number>();
@@ -167,8 +163,8 @@ export type EloMatchState = {
   player2Id: string;
   pre1: number;
   pre2: number;
-  preGames1: number;
-  preGames2: number;
+  preMatches1: number;
+  preMatches2: number;
   post1: number;
   post2: number;
 };
@@ -189,7 +185,6 @@ export const calculateEloMatchStates = (
     const state = {
       rating: eloConfig.baseline,
       matchesPlayed: 0,
-      gamesPlayed: 0
     };
     states.set(playerId, state);
     return state;
@@ -212,8 +207,8 @@ export const calculateEloMatchStates = (
 
     const pre1 = player1.rating;
     const pre2 = player2.rating;
-    const preGames1 = player1.gamesPlayed;
-    const preGames2 = player2.gamesPlayed;
+    const preMatches1 = player1.matchesPlayed;
+    const preMatches2 = player2.matchesPlayed;
 
     const score1 = totals.p1Wins / totals.totalGames;
     const score2 = totals.p2Wins / totals.totalGames;
@@ -233,8 +228,8 @@ export const calculateEloMatchStates = (
       player2Id: match.player2_id,
       pre1,
       pre2,
-      preGames1,
-      preGames2,
+      preMatches1,
+      preMatches2,
       post1: next1,
       post2: next2
     });
@@ -243,8 +238,6 @@ export const calculateEloMatchStates = (
     player2.rating = next2;
     player1.matchesPlayed += 1;
     player2.matchesPlayed += 1;
-    player1.gamesPlayed += totals.totalGames;
-    player2.gamesPlayed += totals.totalGames;
   });
 
   return entries;
@@ -267,7 +260,6 @@ export const calculateEloDeltasForPlayer = (
     const state = {
       rating: eloConfig.baseline,
       matchesPlayed: 0,
-      gamesPlayed: 0
     };
     states.set(id, state);
     return state;
@@ -314,8 +306,6 @@ export const calculateEloDeltasForPlayer = (
     player2.rating = next2;
     player1.matchesPlayed += 1;
     player2.matchesPlayed += 1;
-    player1.gamesPlayed += totals.totalGames;
-    player2.gamesPlayed += totals.totalGames;
   });
 
   return deltas;

@@ -57,15 +57,15 @@ const formatOptions: Array<{ value: MatchFormat; label: string }> = [
   { value: 'bo7', label: 'Best of 7' }
 ];
 
-const setsByFormat: Record<MatchFormat, number> = {
+const gamesByFormat: Record<MatchFormat, number> = {
   bo1: 1,
   bo3: 3,
   bo5: 5,
   bo7: 7
 };
 
-const setCount = computed(() => setsByFormat[matchFormat.value]);
-const neededWins = computed(() => Math.floor(setCount.value / 2) + 1);
+const gameCount = computed(() => gamesByFormat[matchFormat.value]);
+const neededWins = computed(() => Math.floor(gameCount.value / 2) + 1);
 const maxMatchDate = computed(() => todayString());
 
 const syncGameRows = (count: number) => {
@@ -79,7 +79,7 @@ const syncGameRows = (count: number) => {
   }));
 };
 
-syncGameRows(setCount.value);
+syncGameRows(gameCount.value);
 
 const playerMap = computed(() => {
   const map = new Map<string, ProfileRow>();
@@ -150,7 +150,7 @@ const resetMessages = () => {
 const resetForm = () => {
   matchDate.value = todayString();
   matchFormat.value = 'bo3';
-  syncGameRows(setsByFormat.bo3);
+  syncGameRows(gamesByFormat.bo3);
   notes.value = '';
   player2Id.value = '';
   if (isAdmin.value) {
@@ -226,7 +226,7 @@ const validateMatch = () => {
   let matchDecided = false;
   let foundGap = false;
 
-  for (let i = 1; i <= setCount.value; i += 1) {
+  for (let i = 1; i <= gameCount.value; i += 1) {
     const row = rowData.value[i - 1] ?? buildGameRow(i);
     const score1 = parseScore(row.player1Score);
     const score2 = parseScore(row.player2Score);
@@ -245,14 +245,14 @@ const validateMatch = () => {
     }
 
     if (foundGap) {
-      errors.push(`Set ${i} is filled after a blank set.`);
-      nextCellErrors[cellKey1] = 'Set order must be contiguous.';
-      nextCellErrors[cellKey2] = 'Set order must be contiguous.';
+      errors.push(`Game ${i} is filled after a blank game.`);
+      nextCellErrors[cellKey1] = 'Game order must be contiguous.';
+      nextCellErrors[cellKey2] = 'Game order must be contiguous.';
       continue;
     }
 
     if (score1Empty || score2Empty) {
-      errors.push(`Set ${i} must include scores for both players.`);
+      errors.push(`Game ${i} must include scores for both players.`);
       if (score1Empty) {
         nextCellErrors[cellKey1] = 'Missing score.';
       }
@@ -263,7 +263,7 @@ const validateMatch = () => {
     }
 
     if (score1 === 'invalid' || score2 === 'invalid') {
-      errors.push(`Set ${i} scores must be numbers.`);
+      errors.push(`Game ${i} scores must be numbers.`);
       if (score1 === 'invalid') {
         nextCellErrors[cellKey1] = 'Invalid score.';
       }
@@ -274,7 +274,7 @@ const validateMatch = () => {
     }
 
     if (score1 < 0 || score2 < 0) {
-      errors.push(`Set ${i} scores must be non-negative.`);
+      errors.push(`Game ${i} scores must be non-negative.`);
       if (score1 < 0) {
         nextCellErrors[cellKey1] = 'Must be >= 0.';
       }
@@ -285,14 +285,14 @@ const validateMatch = () => {
     }
 
     if (score1 === score2) {
-      errors.push(`Set ${i} cannot be tied.`);
+      errors.push(`Game ${i} cannot be tied.`);
       nextCellErrors[cellKey1] = 'No ties.';
       nextCellErrors[cellKey2] = 'No ties.';
       continue;
     }
 
     if (matchDecided) {
-      errors.push(`Set ${i} was played after the match was already decided.`);
+      errors.push(`Game ${i} was played after the match was already decided.`);
       nextCellErrors[cellKey1] = 'Match already decided.';
       nextCellErrors[cellKey2] = 'Match already decided.';
       continue;
@@ -302,14 +302,14 @@ const validateMatch = () => {
     const loserScore = Math.min(score1, score2);
 
     if (winnerScore < 11) {
-      errors.push(`Set ${i} winner must reach at least 11 points.`);
+      errors.push(`Game ${i} winner must reach at least 11 points.`);
       nextCellErrors[cellKey1] = 'Winning score must be >= 11.';
       nextCellErrors[cellKey2] = 'Winning score must be >= 11.';
       continue;
     }
 
     if (winnerScore - loserScore < 2) {
-      errors.push(`Set ${i} must be won by 2 points.`);
+      errors.push(`Game ${i} must be won by 2 points.`);
       nextCellErrors[cellKey1] = 'Must win by 2.';
       nextCellErrors[cellKey2] = 'Must win by 2.';
       continue;
@@ -475,7 +475,7 @@ watch([player1Id, player2Id], () => {
 });
 
 watch(matchFormat, (next) => {
-  syncGameRows(setsByFormat[next]);
+  syncGameRows(gamesByFormat[next]);
   if (validationErrors.value.length || Object.keys(cellErrors.value).length) {
     validationErrors.value = [];
     cellErrors.value = {};

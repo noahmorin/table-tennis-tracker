@@ -15,6 +15,7 @@ import { eloConfig } from '../config/eloConfig';
 
 type TabId = 'overview' | 'matches' | 'elo' | 'streaks' | 'points';
 type DateFilterOption = 'all' | '30' | '60' | '90';
+const MIN_MATCHES_FOR_ELO_DISPLAY = 3;
 
 type OpponentSummary = {
   id: string;
@@ -210,6 +211,7 @@ const stats = computed(() => {
       eloSeries: [] as EloPoint[],
       eloDeltas: new Map<string, number>(),
       eloByPlayer: new Map<string, number>(),
+      matchCountsByPlayer: new Map<string, number>(),
       currentElo: Number.NaN,
       highestElo: Number.NaN,
       lowestElo: Number.NaN,
@@ -223,6 +225,16 @@ const stats = computed(() => {
   const eloByPlayer = calculateEloRatings(matchList, totalsByMatch, seededPlayerIds);
   const eloMatchStates = calculateEloMatchStates(matchList, totalsByMatch, seededPlayerIds);
   const eloStateByMatchId = new Map(eloMatchStates.map((state) => [state.matchId, state]));
+  const matchCountsByPlayer = new Map<string, number>();
+
+  matchList.forEach((match) => {
+    const totals = totalsByMatch.get(match.id);
+    if (!totals || totals.totalGames <= 0) {
+      return;
+    }
+    matchCountsByPlayer.set(match.player1_id, (matchCountsByPlayer.get(match.player1_id) ?? 0) + 1);
+    matchCountsByPlayer.set(match.player2_id, (matchCountsByPlayer.get(match.player2_id) ?? 0) + 1);
+  });
   const targetMatches = matchList.filter(
     (match) => match.player1_id === targetId || match.player2_id === targetId
   );
@@ -336,8 +348,8 @@ const stats = computed(() => {
     const eloState = eloStateByMatchId.get(match.id);
     if (eloState) {
       const opponentElo = isPlayer1 ? eloState.pre2 : eloState.pre1;
-      const opponentPreGames = isPlayer1 ? eloState.preGames2 : eloState.preGames1;
-      if (opponentPreGames < 3) {
+      const opponentPreMatches = isPlayer1 ? eloState.preMatches2 : eloState.preMatches1;
+      if (opponentPreMatches < MIN_MATCHES_FOR_ELO_DISPLAY) {
         return;
       }
       const strength = opponentStrength.get(opponentId) ?? {
@@ -452,7 +464,7 @@ const stats = computed(() => {
     return worst;
   }, null);
 
-  const hasElo = gamesPlayed >= 3;
+  const hasElo = matchesPlayed >= MIN_MATCHES_FOR_ELO_DISPLAY;
   const deltas = hasElo
     ? calculateEloDeltasForPlayer(matchList, totalsByMatch, targetId)
     : new Map<string, number>();
@@ -538,6 +550,7 @@ const stats = computed(() => {
     eloSeries,
     eloDeltas: deltas,
     eloByPlayer,
+    matchCountsByPlayer,
     currentElo,
     highestElo,
     lowestElo,
@@ -583,6 +596,10 @@ const opponentMetaLabel = (summary: OpponentSummary | null) => {
   if (!summary) {
     return '';
   }
+  const matchesPlayed = stats.value.matchCountsByPlayer.get(summary.id) ?? 0;
+  if (matchesPlayed < MIN_MATCHES_FOR_ELO_DISPLAY) {
+    return `Elo - · ${summary.wins}-${summary.losses}`;
+  }
   const eloValue = stats.value.eloByPlayer.get(summary.id);
   const eloLabel = Number.isFinite(eloValue ?? NaN)
     ? `Elo ${formatNumber(Math.round(eloValue as number))}`
@@ -593,7 +610,7 @@ const opponentMetaLabel = (summary: OpponentSummary | null) => {
 const heroRecordLabel = computed(() => `${stats.value.wins}-${stats.value.losses}`);
 const heroEloLabel = computed(() => formatNumber(Math.round(stats.value.currentElo)));
 const heroMatchesLabel = computed(() => formatNumber(stats.value.matchesPlayed));
-const hasEloForDisplay = computed(() => stats.value.gamesWon + stats.value.gamesLost >= 3);
+const hasEloForDisplay = computed(() => stats.value.matchesPlayed >= MIN_MATCHES_FOR_ELO_DISPLAY);
 
 const overviewTiles = computed(() => {
   const best = stats.value.bestOpponent;
