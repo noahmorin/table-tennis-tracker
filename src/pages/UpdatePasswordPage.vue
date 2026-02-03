@@ -8,6 +8,7 @@ const router = useRouter();
 
 const MIN_PASSWORD_LENGTH = 8;
 const invalidLinkMessage = 'Invalid or expired link. Request a new password reset.';
+const SESSION_TIMEOUT_MS = 12000;
 
 const loading = ref(true);
 const hasSession = ref(false);
@@ -48,31 +49,61 @@ const clearAuthHash = () => {
   window.history.replaceState(null, '', nextUrl);
 };
 
-const loadSessionFromLink = async () => {
-  linkError.value = null;
-  const params = typeof window === 'undefined' ? {} : parseHash(window.location.hash);
-  const accessToken = params.access_token;
-  const refreshToken = params.refresh_token;
-
-  if (accessToken) {
-    if (!refreshToken) {
-      linkError.value = invalidLinkMessage;
-    } else {
-      const { error } = await supabase.auth.setSession({
-        access_token: accessToken,
-        refresh_token: refreshToken
-      });
-      if (error) {
-        linkError.value = invalidLinkMessage;
-      }
+const withTimeout = async <T,>(promise: Promise<T>, timeoutMs: number) => {
+  let timeoutId: ReturnType<typeof setTimeout> | null = null;
+  const timeout = new Promise<T>((_, reject) => {
+    timeoutId = setTimeout(() => reject(new Error('timeout')), timeoutMs);
+  });
+  try {
+    return await Promise.race([promise, timeout]);
+  } finally {
+    if (timeoutId) {
+      clearTimeout(timeoutId);
     }
   }
+};
 
-  clearAuthHash();
+const loadSessionFromLink = async () => {
+  linkError.value = null;
+  let session = null;
+  try {
+    const params = typeof window === 'undefined' ? {} : parseHash(window.location.hash);
+    const accessToken = params.access_token;
+    const refreshToken = params.refresh_token;
 
-  const { data } = await supabase.auth.getSession();
-  hasSession.value = Boolean(data.session);
+    if (accessToken) {
+      if (!refreshToken) {
+        linkError.value = invalidLinkMessage;
+      } else {
+        const { data, error } = await withTimeout(
+          supabase.auth.setSession({
+            access_token: accessToken,
+            refresh_token: refreshToken
+          }),
+          SESSION_TIMEOUT_MS
+        );
+        if (error) {
+          linkError.value = invalidLinkMessage;
+        } else {
+          session = data.session ?? null;
+        }
+      }
+    }
 
+    clearAuthHash();
+
+    if (!session) {
+      const { data, error } = await withTimeout(supabase.auth.getSession(), SESSION_TIMEOUT_MS);
+      if (error && !linkError.value) {
+        linkError.value = invalidLinkMessage;
+      }
+      session = data.session ?? null;
+    }
+  } catch (error) {
+    linkError.value = invalidLinkMessage;
+  }
+
+  hasSession.value = Boolean(session);
   if (!hasSession.value && !linkError.value) {
     linkError.value = invalidLinkMessage;
   }
@@ -145,8 +176,11 @@ const goToLeaderboard = () => {
 
 onMounted(async () => {
   loading.value = true;
-  await loadSessionFromLink();
-  loading.value = false;
+  try {
+    await loadSessionFromLink();
+  } finally {
+    loading.value = false;
+  }
 });
 </script>
 
