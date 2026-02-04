@@ -20,9 +20,7 @@ export const eloConfig = {
   baseline: readEnvNumber('VITE_ELO_BASELINE', 1000),
   floor: readEnvNumber('VITE_ELO_FLOOR', 100),
   scale: readEnvNumber('VITE_ELO_SCALE', 400),
-  kMax: readEnvNumber('VITE_ELO_K_MAX', 72),
-  kMin: readEnvNumber('VITE_ELO_K_MIN', 24),
-  halfLife: readEnvNumber('VITE_ELO_HALF_LIFE', 20),
+  kFactor: readEnvNumber('VITE_ELO_K', 24),
   doublesMultiplier: readEnvNumber('VITE_ELO_DOUBLES_MULTIPLIER', 0.8),
   formatWeights
 };

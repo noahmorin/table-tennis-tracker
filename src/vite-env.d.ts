@@ -11,9 +11,7 @@ interface ImportMetaEnv {
   readonly VITE_ELO_BASELINE: string;
   readonly VITE_ELO_FLOOR: string;
   readonly VITE_ELO_SCALE: string;
-  readonly VITE_ELO_K_MAX: string;
-  readonly VITE_ELO_K_MIN: string;
-  readonly VITE_ELO_HALF_LIFE: string;
+  readonly VITE_ELO_K: string;
   readonly VITE_ELO_WEIGHT_BO1: string;
   readonly VITE_ELO_WEIGHT_BO3: string;
   readonly VITE_ELO_WEIGHT_BO5: string;

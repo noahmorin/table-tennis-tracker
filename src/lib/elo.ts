@@ -34,19 +34,7 @@ const resolveFormatWeight = (format: MatchFormat) => {
 
 const resolveScale = () => (eloConfig.scale > 0 ? eloConfig.scale : 400);
 
-const resolveKRange = () => {
-  const kMax = Math.max(eloConfig.kMax, eloConfig.kMin);
-  const kMin = Math.min(eloConfig.kMax, eloConfig.kMin);
-  return { kMax, kMin };
-};
-
-const kForMatchesPlayed = (matchesPlayed: number) => {
-  const { kMax, kMin } = resolveKRange();
-  if (eloConfig.halfLife <= 0) {
-    return kMax;
-  }
-  return kMin + (kMax - kMin) * Math.pow(0.5, matchesPlayed / eloConfig.halfLife);
-};
+const resolveK = () => (eloConfig.kFactor > 0 ? eloConfig.kFactor : 24);
 
 const expectedScore = (rating: number, opponentRating: number) => {
   const scale = resolveScale();
@@ -151,13 +139,8 @@ export const calculateEloRatings = (
     const formatWeight = resolveFormatWeight(match.match_format);
     const doublesMultiplier = match.match_type === 'doubles' ? eloConfig.doublesMultiplier : 1;
 
-    const teamAMatchesPlayed =
-      teamAStates.reduce((sum, entry) => sum + entry.state.matchesPlayed, 0) / teamAStates.length;
-    const teamBMatchesPlayed =
-      teamBStates.reduce((sum, entry) => sum + entry.state.matchesPlayed, 0) / teamBStates.length;
-
-    const teamAK = kForMatchesPlayed(teamAMatchesPlayed) * formatWeight * doublesMultiplier;
-    const teamBK = kForMatchesPlayed(teamBMatchesPlayed) * formatWeight * doublesMultiplier;
+    const teamAK = resolveK() * formatWeight * doublesMultiplier;
+    const teamBK = resolveK() * formatWeight * doublesMultiplier;
 
     const deltaA = teamAK * (scoreA - expectedA);
     const deltaB = teamBK * (scoreB - expectedB);
@@ -260,13 +243,8 @@ export const calculateEloMatchStates = (
     const formatWeight = resolveFormatWeight(match.match_format);
     const doublesMultiplier = match.match_type === 'doubles' ? eloConfig.doublesMultiplier : 1;
 
-    const teamAMatchesPlayed =
-      teamAStates.reduce((sum, entry) => sum + entry.state.matchesPlayed, 0) / teamAStates.length;
-    const teamBMatchesPlayed =
-      teamBStates.reduce((sum, entry) => sum + entry.state.matchesPlayed, 0) / teamBStates.length;
-
-    const teamAK = kForMatchesPlayed(teamAMatchesPlayed) * formatWeight * doublesMultiplier;
-    const teamBK = kForMatchesPlayed(teamBMatchesPlayed) * formatWeight * doublesMultiplier;
+    const teamAK = resolveK() * formatWeight * doublesMultiplier;
+    const teamBK = resolveK() * formatWeight * doublesMultiplier;
 
     const deltaA = teamAK * (scoreA - expectedA);
     const deltaB = teamBK * (scoreB - expectedB);
@@ -358,13 +336,8 @@ export const calculateEloDeltasForPlayer = (
     const formatWeight = resolveFormatWeight(match.match_format);
     const doublesMultiplier = match.match_type === 'doubles' ? eloConfig.doublesMultiplier : 1;
 
-    const teamAMatchesPlayed =
-      teamAStates.reduce((sum, entry) => sum + entry.state.matchesPlayed, 0) / teamAStates.length;
-    const teamBMatchesPlayed =
-      teamBStates.reduce((sum, entry) => sum + entry.state.matchesPlayed, 0) / teamBStates.length;
-
-    const teamAK = kForMatchesPlayed(teamAMatchesPlayed) * formatWeight * doublesMultiplier;
-    const teamBK = kForMatchesPlayed(teamBMatchesPlayed) * formatWeight * doublesMultiplier;
+    const teamAK = resolveK() * formatWeight * doublesMultiplier;
+    const teamBK = resolveK() * formatWeight * doublesMultiplier;
 
     const deltaA = teamAK * (scoreA - expectedA);
     const deltaB = teamBK * (scoreB - expectedB);
