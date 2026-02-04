@@ -18,9 +18,9 @@ const formatWeights: Record<MatchFormat, number> = {
 
 export const eloConfig = {
   baseline: readEnvNumber('VITE_ELO_BASELINE', 1000),
-  floor: readEnvNumber('VITE_ELO_FLOOR', 100),
-  scale: readEnvNumber('VITE_ELO_SCALE', 400),
-  kFactor: readEnvNumber('VITE_ELO_K', 24),
+  floor: readEnvNumber('VITE_ELO_FLOOR', 400),
+  scale: readEnvNumber('VITE_ELO_SCALE', 1000),
+  kFactor: readEnvNumber('VITE_ELO_K', 40),
   doublesMultiplier: readEnvNumber('VITE_ELO_DOUBLES_MULTIPLIER', 0.8),
   formatWeights
 };
