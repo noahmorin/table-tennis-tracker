@@ -12,11 +12,21 @@ const routes = [
   { path: '/login', component: LoginPage, meta: { public: true } },
   { path: '/account/update-password', component: UpdatePasswordPage, meta: { public: true } },
   { path: '/access_token=:token(.*)', component: UpdatePasswordPage, meta: { public: true } },
-  { path: '/submit-match', component: SubmitMatchPage, meta: { requiresAuth: true } },
+  { path: '/submit-match', component: SubmitMatchPage, meta: { requiresAuth: true, requiresProfile: true } },
   { path: '/leaderboard', component: LeaderboardPage, meta: { requiresAuth: true } },
-  { path: '/players/:id', component: PlayerProfilePage, props: true, meta: { requiresAuth: true } },
-  { path: '/players/:id/matches', component: MatchesPage, props: true, meta: { requiresAuth: true } },
-  { path: '/my-matches', component: MatchesPage, meta: { requiresAuth: true } }
+  {
+    path: '/players/:id',
+    component: PlayerProfilePage,
+    props: true,
+    meta: { requiresAuth: true, requiresProfile: true }
+  },
+  {
+    path: '/players/:id/matches',
+    component: MatchesPage,
+    props: true,
+    meta: { requiresAuth: true, requiresProfile: true }
+  },
+  { path: '/my-matches', component: MatchesPage, meta: { requiresAuth: true, requiresProfile: true } }
 ];
 
 const router = createRouter({
@@ -34,18 +44,22 @@ router.beforeEach(async (to) => {
     if (to.path === '/account/update-password') {
       return true;
     }
-    if (session.value && profile.value) {
+    if (session.value) {
       return '/leaderboard';
     }
     return true;
   }
 
-  if (!session.value || !profile.value) {
+  if (!session.value) {
     return '/login';
   }
 
+  if (to.meta.requiresProfile && !profile.value) {
+    return '/leaderboard';
+  }
+
   if (to.path === '/my-matches') {
-    return `/players/${profile.value.id}/matches`;
+    return `/players/${profile?.value?.id}/matches`;
   }
 
   return true;

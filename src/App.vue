@@ -29,7 +29,8 @@ const bugSuccess = ref<string | null>(null);
 
 const isDark = computed(() => theme.value === 'dark');
 const activeThemeLabel = computed(() => (isDark.value ? 'Dark' : 'Light'));
-const showBottomNav = computed(() => isAuthenticated.value);
+const isSignedIn = computed(() => !!user.value);
+const showBottomNav = computed(() => !!profile.value);
 const profileLabel = computed(
   () => profile.value?.display_name ?? profile.value?.username ?? user.value?.email ?? ''
 );
@@ -98,7 +99,7 @@ const resetBugForm = () => {
 
 const openBugDialog = () => {
   if (!isAuthenticated.value) {
-    bugError.value = 'You must be signed in to submit a bug report.';
+    bugError.value = 'You must be assigned a profile to submit a bug report.';
     return;
   }
   resetBugForm();
@@ -178,7 +179,7 @@ onMounted(() => {
         <h1>{{ appName }}</h1>
       </div>
       <div class="header-actions">
-        <div v-if="isAuthenticated" class="user-pill">{{ profileLabel }}</div>
+        <div v-if="isSignedIn" class="user-pill">{{ profileLabel }}</div>
         <button class="gear-button" type="button" aria-label="Theme settings" @click="openThemeDialog">
           <Settings aria-hidden="true" class="gear-icon" />
         </button>
@@ -250,10 +251,10 @@ onMounted(() => {
         <button v-if="isAuthenticated" class="ghost-btn" type="button" @click="openBugDialog">
           Report a bug
         </button>
-        <p v-else class="theme-dialog__hint">Sign in to submit bug reports.</p>
+        <p v-else class="theme-dialog__hint">Sign in and get assigned a profile to submit bug reports.</p>
       </div>
 
-      <div v-if="isAuthenticated" class="theme-dialog__section theme-dialog__actions">
+      <div v-if="isSignedIn" class="theme-dialog__section theme-dialog__actions">
         <h3 class="theme-dialog__section-title">Account</h3>
         <button class="ghost-btn ghost-btn--danger" type="button" @click="handleSignOut">
           <LogOut class="ghost-btn__icon" aria-hidden="true" />

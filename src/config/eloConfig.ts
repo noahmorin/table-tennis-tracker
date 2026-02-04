@@ -10,10 +10,10 @@ const readEnvNumber = (key: keyof ImportMetaEnv, fallback: number) => {
 };
 
 const formatWeights: Record<MatchFormat, number> = {
-  bo1: readEnvNumber('VITE_ELO_WEIGHT_BO1', 0.75),
+  bo1: readEnvNumber('VITE_ELO_WEIGHT_BO1', 0.5),
   bo3: readEnvNumber('VITE_ELO_WEIGHT_BO3', 1),
-  bo5: readEnvNumber('VITE_ELO_WEIGHT_BO5', 1.25),
-  bo7: readEnvNumber('VITE_ELO_WEIGHT_BO7', 1.5)
+  bo5: readEnvNumber('VITE_ELO_WEIGHT_BO5', 1.5),
+  bo7: readEnvNumber('VITE_ELO_WEIGHT_BO7', 2)
 };
 
 export const eloConfig = {

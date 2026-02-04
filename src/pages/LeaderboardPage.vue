@@ -8,6 +8,7 @@ import { listProfiles } from '../lib/data/profiles';
 import type { MatchRow, GameRow, ProfileRow } from '../lib/data/types';
 import { buildMatchGameTotals, calculateEloRatings } from '../lib/elo';
 import { useMatchMode } from '../stores/matchMode';
+import { useAuth } from '../stores/auth';
 import 'ag-grid-community/styles/ag-grid.css';
 import 'ag-grid-community/styles/ag-theme-quartz.css';
 
@@ -31,6 +32,11 @@ const error = ref<string | null>(null);
 const rows = ref<LeaderRow[]>([]);
 const searchTerm = ref('');
 const { matchMode, setMatchMode } = useMatchMode();
+const { user, profile, profileLoading } = useAuth();
+
+const showProfileWarning = computed(
+  () => !!user.value && !profile.value && !profileLoading.value
+);
 
 const formatPlayerLabel = (player: ProfileRow) => {
   const base = player.display_name?.trim() || player.username;
@@ -353,6 +359,10 @@ watch(matchMode, () => {
       <h2>Leaderboard</h2>
       <p>Rankings based on Elo ratings.</p>
     </header>
+
+    <div v-if="showProfileWarning" class="form-message is-warning">
+      An admin needs to assign your profile before you can submit matches or view your stats.
+    </div>
 
     <div class="leaderboard-controls">
       <div class="mode-toggle auth-toggle match-type-toggle--page" role="tablist" aria-label="Match type">

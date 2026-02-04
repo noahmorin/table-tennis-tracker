@@ -8,11 +8,10 @@ const {
   authLoading,
   profileLoading,
   profileError,
-  isAuthenticated,
+  user,
   signInWithPassword,
   signUpWithEmail,
-  signOut,
-  checkUsernameAvailability
+  signOut
 } = useAuth();
 
 type AuthMode = 'sign-in' | 'sign-up';
@@ -21,14 +20,9 @@ const mode = ref<AuthMode>('sign-in');
 const email = ref('');
 const password = ref('');
 const confirmPassword = ref('');
-const username = ref('');
-const firstName = ref('');
-const lastName = ref('');
 
 const infoMessage = ref<string | null>(null);
 const errorMessage = ref<string | null>(null);
-const usernameStatus = ref<string | null>(null);
-const usernameAvailable = ref<boolean | null>(null);
 const submitting = ref(false);
 
 const headerTitle = computed(() => {
@@ -37,7 +31,7 @@ const headerTitle = computed(() => {
 
 const headerCopy = computed(() => {
   return mode.value === 'sign-up'
-    ? 'Create your league profile with email and password.'
+    ? 'Create your account with email and password. An admin will assign your profile.'
     : 'Use your league email to submit and edit matches.';
 });
 
@@ -46,7 +40,7 @@ const passwordAutoComplete = computed(() =>
   mode.value === 'sign-up' ? 'new-password' : 'current-password'
 );
 
-watch(isAuthenticated, (value) => {
+watch(user, (value) => {
   if (value) {
     router.replace('/leaderboard');
   }
@@ -55,34 +49,12 @@ watch(isAuthenticated, (value) => {
 watch(mode, () => {
   infoMessage.value = null;
   errorMessage.value = null;
-  usernameStatus.value = null;
-  usernameAvailable.value = null;
   confirmPassword.value = '';
 });
-
-const normalizeUsername = (value: string) => value.trim().toLowerCase();
-
-const validateUsername = (value: string) => {
-  const normalized = normalizeUsername(value);
-  if (!normalized) {
-    return 'Username is required.';
-  }
-  if (!/^[a-z0-9._-]+$/.test(normalized)) {
-    return 'Use letters, numbers, dots, underscores, or dashes.';
-  }
-  return null;
-};
 
 const validateSignUp = () => {
   if (!email.value || !password.value || !confirmPassword.value) {
     return 'Email and password are required.';
-  }
-  const usernameError = validateUsername(username.value);
-  if (usernameError) {
-    return usernameError;
-  }
-  if (!firstName.value.trim() || !lastName.value.trim()) {
-    return 'First and last name are required.';
   }
   if (password.value.length < 8) {
     return 'Password must be at least 8 characters.';
@@ -124,56 +96,22 @@ const handleSignUp = async () => {
     return;
   }
 
-  const usernameCheck = await checkUsernameAvailability(username.value);
-  if (usernameCheck.available === false) {
-    errorMessage.value = usernameCheck.message;
-    usernameStatus.value = usernameCheck.message;
-    usernameAvailable.value = false;
-    return;
-  }
-
   submitting.value = true;
   try {
     const { needsEmailConfirmation } = await signUpWithEmail({
       email: email.value.trim(),
-      password: password.value,
-      username: username.value,
-      firstName: firstName.value,
-      lastName: lastName.value
+      password: password.value
     });
 
     infoMessage.value = needsEmailConfirmation
-      ? 'Check your email to confirm your account, then sign in.'
+      ? 'Check your email to confirm your account, then sign in. An admin will assign your profile.'
       : 'Account created. Signing you in now.';
     errorMessage.value = null;
   } catch (error) {
-    const usernameCheck = await checkUsernameAvailability(username.value);
-    if (usernameCheck.available === false) {
-      errorMessage.value = usernameCheck.message;
-    } else {
-      errorMessage.value = 'Signup failed. Check your details and try again.';
-    }
+    errorMessage.value = 'Signup failed. Check your details and try again.';
   } finally {
     submitting.value = false;
   }
-};
-
-const checkUsername = async () => {
-  if (!username.value.trim()) {
-    usernameStatus.value = null;
-    usernameAvailable.value = null;
-    return;
-  }
-
-  const result = await checkUsernameAvailability(username.value);
-  if (result.available === null) {
-    usernameStatus.value = null;
-    usernameAvailable.value = null;
-    return;
-  }
-
-  usernameStatus.value = result.message;
-  usernameAvailable.value = result.available;
 };
 
 const handleSignOut = async () => {
@@ -217,35 +155,6 @@ const handleSignOut = async () => {
         <span>Email</span>
         <input v-model="email" type="email" placeholder="you@company.com" autocomplete="email" />
       </label>
-
-      <label v-if="mode === 'sign-up'" class="field">
-        <span>Username</span>
-        <input
-          v-model="username"
-          type="text"
-          placeholder="first.last"
-          autocomplete="username"
-          @blur="checkUsername"
-        />
-        <span
-          v-if="usernameStatus"
-          class="field-hint"
-          :class="{ 'is-error': usernameAvailable === false, 'is-success': usernameAvailable }"
-        >
-          {{ usernameStatus }}
-        </span>
-      </label>
-
-      <div v-if="mode === 'sign-up'" class="field-row">
-        <label class="field">
-          <span>First name</span>
-          <input v-model="firstName" type="text" placeholder="First name" autocomplete="given-name" />
-        </label>
-        <label class="field">
-          <span>Last name</span>
-          <input v-model="lastName" type="text" placeholder="Last name" autocomplete="family-name" />
-        </label>
-      </div>
 
       <label class="field">
         <span>{{ passwordLabel }}</span>

@@ -16,9 +16,6 @@ export type Profile = {
 type SignUpInput = {
   email: string;
   password: string;
-  username: string;
-  firstName: string;
-  lastName: string;
 };
 
 const session = ref<Session | null>(null);
@@ -35,13 +32,6 @@ const isAdmin = computed(() => profile.value?.is_admin ?? false);
 
 let initPromise: Promise<void> | null = null;
 let authSubscription: { unsubscribe: () => void } | null = null;
-
-const normalizeUsername = (value: unknown) => String(value ?? '').trim().toLowerCase();
-
-const normalizeName = (value: unknown) =>
-  String(value ?? '')
-    .trim()
-    .replace(/\s+/g, ' ');
 
 const buildEmailRedirectUrl = () => {
   if (typeof window === 'undefined') {
@@ -159,23 +149,11 @@ const signInWithPassword = async (email: string, password: string) => {
 
 const signUpWithEmail = async (input: SignUpInput) => {
   const redirectTo = buildEmailRedirectUrl();
-  const username = normalizeUsername(input.username);
-  const firstName = normalizeName(input.firstName);
-  const lastName = normalizeName(input.lastName);
-
-  if (!username || !firstName || !lastName) {
-    throw new Error('Username, first name, and last name are required.');
-  }
 
   const { data, error } = await supabase.auth.signUp({
     email: input.email,
     password: input.password,
     options: {
-      data: {
-        username,
-        first_name: firstName,
-        last_name: lastName
-      },
       emailRedirectTo: redirectTo
     }
   });
@@ -211,26 +189,6 @@ const requireProfileId = () => {
   return { profileId: profile.value.id, error: null };
 };
 
-const checkUsernameAvailability = async (value: string) => {
-  const username = normalizeUsername(value);
-  if (!username) {
-    return { available: false, message: 'Username is required.' };
-  }
-  if (!/^[a-z0-9._-]+$/.test(username)) {
-    return { available: false, message: 'Use letters, numbers, dots, underscores, or dashes.' };
-  }
-
-  const { data, error } = await supabase.rpc('username_available', { p_username: username });
-  if (error) {
-    return { available: null, message: 'Unable to check username availability.' };
-  }
-
-  return {
-    available: Boolean(data),
-    message: data ? 'Username is available.' : 'Username is taken.'
-  };
-};
-
 export const useAuth = () => ({
   session,
   user,
@@ -246,6 +204,5 @@ export const useAuth = () => ({
   signUpWithEmail,
   signOut,
   refreshProfile,
-  requireProfileId,
-  checkUsernameAvailability
+  requireProfileId
 });
