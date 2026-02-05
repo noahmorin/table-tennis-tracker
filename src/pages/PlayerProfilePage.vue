@@ -32,9 +32,15 @@ const isDeuceGame = (game: GameRow) => {
   return minScore >= 10 && maxScore - minScore === 2;
 };
 
+type PlayerLinkPart = {
+  id: string;
+  label: string;
+};
+
 type OpponentSummary = {
   id: string;
   label: string;
+  memberIds: string[];
   wins: number;
   losses: number;
   matches: number;
@@ -54,8 +60,8 @@ type PartnerSummary = {
 type RecentMatchSummary = {
   id: string;
   date: string;
-  opponentId: string;
-  opponentName: string;
+  opponentIds: string[];
+  opponentLabel: string;
   outcome: 'W' | 'L';
   score: string;
 };
@@ -79,7 +85,8 @@ type EloDeltaHighlight = {
 
 type StatTile = {
   label: string;
-  value: string;
+  value: string | PlayerLinkPart[];
+  valueSeparator?: string;
   meta?: string;
   to?: RouteLocationRaw;
 };
@@ -113,6 +120,14 @@ const matchDetailsLink = (matchId: string): RouteLocationRaw => ({
   query: { matchId }
 });
 
+const openMatchDetails = (matchId: string) => {
+  router.push(matchDetailsLink(matchId));
+};
+
+const playerProfileLink = (playerId: string): RouteLocationRaw => ({
+  path: `/players/${playerId}`
+});
+
 const playerMap = computed(() => {
   const map = new Map<string, ProfileRow>();
   profiles.value.forEach((player) => {
@@ -133,6 +148,18 @@ const resolveOpponentName = (id: string) => {
   }
   return formatPlayerLabel(player);
 };
+
+const buildPlayerLinkParts = (ids: string[]): PlayerLinkPart[] =>
+  ids.filter(Boolean).map((id) => ({
+    id,
+    label: resolveOpponentName(id)
+  }));
+
+const buildPartnerLinkParts = (partners: PartnerSummary[]): PlayerLinkPart[] =>
+  partners.map((partner) => ({
+    id: partner.id,
+    label: partner.name
+  }));
 
 const playerDisplayName = computed(() => profile.value?.display_name?.trim() || 'Player');
 const playerUsername = computed(() => profile.value?.username?.trim() || '');
@@ -381,6 +408,7 @@ const stats = computed(() => {
     {
       id: string;
       label: string;
+      memberIds: string[];
       wins: number;
       losses: number;
       matches: number;
@@ -511,6 +539,7 @@ const stats = computed(() => {
       opponentMap.get(opponentKey) ?? {
         id: opponentKey,
         label: opponentLabel,
+        memberIds: opponentIds,
         wins: 0,
         losses: 0,
         matches: 0,
@@ -609,6 +638,7 @@ const stats = computed(() => {
   const opponentSummaries: OpponentSummary[] = Array.from(opponentMap.values()).map((record) => ({
     id: record.id,
     label: record.label,
+    memberIds: record.memberIds,
     wins: record.wins,
     losses: record.losses,
     matches: record.matches,
@@ -827,15 +857,13 @@ const stats = computed(() => {
     .reverse()
     .slice(0, 5)
     .map((entry) => {
-      const opponentIds = resolveOpponentTeamIds(entry.match, targetId);
+      const opponentIds = resolveOpponentTeamIds(entry.match, targetId).filter(Boolean);
       const opponentSingleId = opponentIds[0] ?? '';
-      const opponentId =
-        opponentIds.length <= 1 ? opponentSingleId || 'unknown' : buildTeamKey(opponentIds);
       return {
         id: entry.match.id,
         date: formatDate(entry.match.match_date),
-        opponentId,
-        opponentName:
+        opponentIds,
+        opponentLabel:
           opponentIds.length <= 1
             ? resolveOpponentName(opponentSingleId)
             : formatTeamLabel(opponentIds),
@@ -1020,12 +1048,14 @@ const overviewTiles = computed<StatTile[]>(() => {
     },
     {
       label: 'Best matchup',
-      value: best ? best.label : '-',
+      value: best ? buildPlayerLinkParts(best.memberIds) : '-',
+      valueSeparator: ' & ',
       meta: opponentMetaLabel(best)
     },
     {
       label: 'Worst matchup',
-      value: worst ? worst.label : '-',
+      value: worst ? buildPlayerLinkParts(worst.memberIds) : '-',
+      valueSeparator: ' & ',
       meta: opponentMetaLabel(worst)
     },
     {
@@ -1039,41 +1069,39 @@ const overviewTiles = computed<StatTile[]>(() => {
     const bestPartner = stats.value.bestPartner;
     const worstPartner = stats.value.worstPartner;
     const mostSuccessful = stats.value.mostSuccessfulPartner;
-    const positiveNames = stats.value.positivePartners.length
-      ? stats.value.positivePartners.map((partner) => partner.name).join(', ')
-      : '-';
-    const negativeNames = stats.value.negativePartners.length
-      ? stats.value.negativePartners.map((partner) => partner.name).join(', ')
-      : '-';
+    const positivePartners = buildPartnerLinkParts(stats.value.positivePartners);
+    const negativePartners = buildPartnerLinkParts(stats.value.negativePartners);
 
     tiles.push(
       {
         label: 'Most frequent partner',
-        value: mostFrequent ? mostFrequent.name : '-',
+        value: mostFrequent ? [{ id: mostFrequent.id, label: mostFrequent.name }] : '-',
         meta: mostFrequent ? `${mostFrequent.matches} matches` : undefined
       },
       {
         label: 'Best partner',
-        value: bestPartner ? bestPartner.name : '-',
+        value: bestPartner ? [{ id: bestPartner.id, label: bestPartner.name }] : '-',
         meta: bestPartner ? `Win ${formatPct(bestPartner.winPct, bestPartner.matches)}` : undefined
       },
       {
         label: 'Worst partner',
-        value: worstPartner ? worstPartner.name : '-',
+        value: worstPartner ? [{ id: worstPartner.id, label: worstPartner.name }] : '-',
         meta: worstPartner ? `Win ${formatPct(worstPartner.winPct, worstPartner.matches)}` : undefined
       },
       {
         label: 'Most successful partnership',
-        value: mostSuccessful ? mostSuccessful.name : '-',
+        value: mostSuccessful ? [{ id: mostSuccessful.id, label: mostSuccessful.name }] : '-',
         meta: mostSuccessful ? `Avg ${formatSigned(mostSuccessful.avgPointDiff, 1)} pts` : undefined
       },
       {
         label: 'Positive diff partners',
-        value: positiveNames
+        value: positivePartners.length ? positivePartners : '-',
+        valueSeparator: ', '
       },
       {
         label: 'Negative diff partners',
-        value: negativeNames
+        value: negativePartners.length ? negativePartners : '-',
+        valueSeparator: ', '
       }
     );
   }
@@ -1491,7 +1519,25 @@ watch(matchMode, () => {
             v-bind="tile.to ? { to: tile.to } : {}"
           >
             <p class="stat-tile__label">{{ tile.label }}</p>
-            <p class="stat-tile__value">{{ tile.value }}</p>
+            <p class="stat-tile__value">
+              <template v-if="Array.isArray(tile.value)">
+                <template v-for="(part, index) in tile.value" :key="`${tile.label}-${part.id}-${index}`">
+                  <router-link
+                    v-if="part.id"
+                    class="player-link"
+                    :to="playerProfileLink(part.id)"
+                    @click.stop
+                  >
+                    {{ part.label }}
+                  </router-link>
+                  <span v-else>{{ part.label }}</span>
+                  <span v-if="index < tile.value.length - 1">{{ tile.valueSeparator ?? ' & ' }}</span>
+                </template>
+              </template>
+              <template v-else>
+                {{ tile.value }}
+              </template>
+            </p>
             <p v-if="tile.meta" class="stat-tile__meta">{{ tile.meta }}</p>
           </component>
         </div>
@@ -1508,7 +1554,25 @@ watch(matchMode, () => {
             v-bind="tile.to ? { to: tile.to } : {}"
           >
             <p class="stat-tile__label">{{ tile.label }}</p>
-            <p class="stat-tile__value">{{ tile.value }}</p>
+            <p class="stat-tile__value">
+              <template v-if="Array.isArray(tile.value)">
+                <template v-for="(part, index) in tile.value" :key="`${tile.label}-${part.id}-${index}`">
+                  <router-link
+                    v-if="part.id"
+                    class="player-link"
+                    :to="playerProfileLink(part.id)"
+                    @click.stop
+                  >
+                    {{ part.label }}
+                  </router-link>
+                  <span v-else>{{ part.label }}</span>
+                  <span v-if="index < tile.value.length - 1">{{ tile.valueSeparator ?? ' & ' }}</span>
+                </template>
+              </template>
+              <template v-else>
+                {{ tile.value }}
+              </template>
+            </p>
           </component>
         </div>
 
@@ -1521,15 +1585,39 @@ watch(matchMode, () => {
           <div v-if="!stats.recentMatches.length" class="form-message">No matches recorded yet.</div>
 
           <div v-else class="recent-list">
-            <router-link
+            <article
               v-for="match in stats.recentMatches"
               :key="match.id"
               class="recent-item recent-item--link"
-              :to="matchDetailsLink(match.id)"
+              role="button"
+              tabindex="0"
+              @click="openMatchDetails(match.id)"
+              @keydown.enter.prevent="openMatchDetails(match.id)"
+              @keydown.space.prevent="openMatchDetails(match.id)"
             >
               <div>
                 <p class="recent-date">{{ match.date }}</p>
-                <p class="recent-opponent">vs {{ match.opponentName }}</p>
+                <p class="recent-opponent">
+                  vs
+                  <template v-if="match.opponentIds.length">
+                    <template
+                      v-for="(opponentId, index) in match.opponentIds"
+                      :key="`${match.id}-${opponentId}-${index}`"
+                    >
+                      <router-link
+                        class="player-link"
+                        :to="playerProfileLink(opponentId)"
+                        @click.stop
+                      >
+                        {{ resolveOpponentName(opponentId) }}
+                      </router-link>
+                      <span v-if="index < match.opponentIds.length - 1"> & </span>
+                    </template>
+                  </template>
+                  <template v-else>
+                    {{ match.opponentLabel }}
+                  </template>
+                </p>
               </div>
               <div class="recent-result">
                 <span class="recent-score">{{ match.score }}</span>
@@ -1546,7 +1634,7 @@ watch(matchMode, () => {
                   </span>
                 </div>
               </div>
-            </router-link>
+            </article>
           </div>
         </article>
       </section>
@@ -1625,7 +1713,25 @@ watch(matchMode, () => {
             v-bind="tile.to ? { to: tile.to } : {}"
           >
             <p class="stat-tile__label">{{ tile.label }}</p>
-            <p class="stat-tile__value">{{ tile.value }}</p>
+            <p class="stat-tile__value">
+              <template v-if="Array.isArray(tile.value)">
+                <template v-for="(part, index) in tile.value" :key="`${tile.label}-${part.id}-${index}`">
+                  <router-link
+                    v-if="part.id"
+                    class="player-link"
+                    :to="playerProfileLink(part.id)"
+                    @click.stop
+                  >
+                    {{ part.label }}
+                  </router-link>
+                  <span v-else>{{ part.label }}</span>
+                  <span v-if="index < tile.value.length - 1">{{ tile.valueSeparator ?? ' & ' }}</span>
+                </template>
+              </template>
+              <template v-else>
+                {{ tile.value }}
+              </template>
+            </p>
             <p v-if="tile.meta" class="stat-tile__meta">{{ tile.meta }}</p>
           </component>
         </div>
@@ -1642,7 +1748,25 @@ watch(matchMode, () => {
             v-bind="tile.to ? { to: tile.to } : {}"
           >
             <p class="stat-tile__label">{{ tile.label }}</p>
-            <p class="stat-tile__value">{{ tile.value }}</p>
+            <p class="stat-tile__value">
+              <template v-if="Array.isArray(tile.value)">
+                <template v-for="(part, index) in tile.value" :key="`${tile.label}-${part.id}-${index}`">
+                  <router-link
+                    v-if="part.id"
+                    class="player-link"
+                    :to="playerProfileLink(part.id)"
+                    @click.stop
+                  >
+                    {{ part.label }}
+                  </router-link>
+                  <span v-else>{{ part.label }}</span>
+                  <span v-if="index < tile.value.length - 1">{{ tile.valueSeparator ?? ' & ' }}</span>
+                </template>
+              </template>
+              <template v-else>
+                {{ tile.value }}
+              </template>
+            </p>
             <p v-if="tile.meta" class="stat-tile__meta">{{ tile.meta }}</p>
           </component>
         </div>
@@ -1680,7 +1804,25 @@ watch(matchMode, () => {
             v-bind="tile.to ? { to: tile.to } : {}"
           >
             <p class="stat-tile__label">{{ tile.label }}</p>
-            <p class="stat-tile__value">{{ tile.value }}</p>
+            <p class="stat-tile__value">
+              <template v-if="Array.isArray(tile.value)">
+                <template v-for="(part, index) in tile.value" :key="`${tile.label}-${part.id}-${index}`">
+                  <router-link
+                    v-if="part.id"
+                    class="player-link"
+                    :to="playerProfileLink(part.id)"
+                    @click.stop
+                  >
+                    {{ part.label }}
+                  </router-link>
+                  <span v-else>{{ part.label }}</span>
+                  <span v-if="index < tile.value.length - 1">{{ tile.valueSeparator ?? ' & ' }}</span>
+                </template>
+              </template>
+              <template v-else>
+                {{ tile.value }}
+              </template>
+            </p>
             <p v-if="tile.meta" class="stat-tile__meta">{{ tile.meta }}</p>
           </component>
         </div>

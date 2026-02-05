@@ -33,6 +33,11 @@ type MatchGameRow = {
   sideBScore: number | string | null;
 };
 
+type PlayerLinkPart = {
+  id: string;
+  label: string;
+};
+
 const buildGameRow = (
   gameNumber: number,
   scores?: { sideA: number; sideB: number }
@@ -154,6 +159,19 @@ const playerLabelForId = (id: string) => {
   return player ? formatPlayerLabel(player) : 'Unknown player';
 };
 
+const playerProfilePath = (playerId: string) => `/players/${playerId}`;
+
+const buildTeamLinkParts = (ids: string[], highlightId?: string): PlayerLinkPart[] => {
+  const parts = ids
+    .filter(Boolean)
+    .map((id) => ({
+      id,
+      label: highlightId && id === highlightId ? 'You' : playerLabelForId(id)
+    }))
+    .filter((part) => part.label);
+  return parts.length ? parts : [{ id: '', label: 'Unknown team' }];
+};
+
 const editTeamAIds = computed(() => {
   const ids = [editTeamAPlayer1Id.value];
   if (isEditDoubles.value) {
@@ -230,13 +248,6 @@ const isParticipant = (match: MatchRow, playerId: string) => {
   const teamA = match.team_a ?? [];
   const teamB = match.team_b ?? [];
   return teamA.includes(playerId) || teamB.includes(playerId);
-};
-
-const formatTeamLabel = (ids: string[], highlightId?: string) => {
-  const labels = ids
-    .map((id) => (highlightId && id === highlightId ? 'You' : playerLabelForId(id)))
-    .filter(Boolean);
-  return labels.length ? labels.join(' & ') : 'Unknown team';
 };
 
 const matchTypeBadge = (match: MatchRow) => (match.match_type === 'doubles' ? 'D' : 'S');
@@ -321,12 +332,10 @@ const matchDateLabel = (value: string) => {
   });
 };
 
-const matchPlayersLabel = (match: MatchRow) => {
+const matchTeamParts = (match: MatchRow, side: 'A' | 'B') => {
   const highlightId =
     profile.value && targetPlayerId.value === profile.value.id ? profile.value.id : undefined;
-  const teamALabel = formatTeamLabel(resolveTeamIds(match, 'A'), highlightId);
-  const teamBLabel = formatTeamLabel(resolveTeamIds(match, 'B'), highlightId);
-  return `${teamALabel} vs ${teamBLabel}`;
+  return buildTeamLinkParts(resolveTeamIds(match, side), highlightId);
 };
 
 const matchScoreLabel = (match: MatchRow) => {
@@ -1126,7 +1135,17 @@ onMounted(() => {
     <section class="page">
       <header class="page-header page-header--with-actions">
         <div>
-          <h2 v-if="targetPlayerLabel">{{ targetPlayerLabel }}'s matches</h2>
+          <h2 v-if="targetPlayerLabel">
+            <router-link
+              v-if="targetPlayerId"
+              class="player-link"
+              :to="playerProfilePath(targetPlayerId)"
+            >
+              {{ targetPlayerLabel }}
+            </router-link>
+            <span v-else>{{ targetPlayerLabel }}</span>
+            's matches
+          </h2>
           <h2 v-else>Matches</h2>
           <p v-if="!targetPlayerLabel">Viewing match history.</p>
         </div>
@@ -1177,7 +1196,41 @@ onMounted(() => {
                 <span class="match-type-pill">{{ matchTypeBadge(match) }}</span>
                 {{ matchDateLabel(match.match_date) }}
               </p>
-              <h3 class="match-card__players">{{ matchPlayersLabel(match) }}</h3>
+              <h3 class="match-card__players">
+                <span class="match-card__team">
+                  <template
+                    v-for="(player, index) in matchTeamParts(match, 'A')"
+                    :key="`teamA-${match.id}-${player.id}-${index}`"
+                  >
+                    <router-link
+                      v-if="player.id"
+                      class="player-link"
+                      :to="playerProfilePath(player.id)"
+                    >
+                      {{ player.label }}
+                    </router-link>
+                    <span v-else>{{ player.label }}</span>
+                    <span v-if="index < matchTeamParts(match, 'A').length - 1"> & </span>
+                  </template>
+                </span>
+                <span class="match-card__vs">vs</span>
+                <span class="match-card__team">
+                  <template
+                    v-for="(player, index) in matchTeamParts(match, 'B')"
+                    :key="`teamB-${match.id}-${player.id}-${index}`"
+                  >
+                    <router-link
+                      v-if="player.id"
+                      class="player-link"
+                      :to="playerProfilePath(player.id)"
+                    >
+                      {{ player.label }}
+                    </router-link>
+                    <span v-else>{{ player.label }}</span>
+                    <span v-if="index < matchTeamParts(match, 'B').length - 1"> & </span>
+                  </template>
+                </span>
+              </h3>
               <p class="match-card__detail">{{ matchFormatLabel(match.match_format) }}</p>
             </div>
             <div class="match-card__score">
@@ -1590,6 +1643,16 @@ onMounted(() => {
 .match-card__players {
   font-size: 16px;
   margin-top: var(--space-2xs);
+}
+
+.match-card__team {
+  display: inline;
+}
+
+.match-card__vs {
+  margin: 0 6px;
+  color: var(--text-muted);
+  font-weight: 500;
 }
 
 .match-card__detail {

@@ -34,6 +34,7 @@ const showBottomNav = computed(() => !!profile.value);
 const profileLabel = computed(
   () => profile.value?.display_name ?? profile.value?.username ?? user.value?.email ?? ''
 );
+const profileLink = computed(() => (profile.value?.id ? `/players/${profile.value.id}` : ''));
 
 const themeColors: Array<{ id: ThemeColor; label: string; swatch: string }> = [
   { id: 'red', label: 'Red', swatch: '#c0392b' },
@@ -179,7 +180,10 @@ onMounted(() => {
         <h1>{{ appName }}</h1>
       </div>
       <div class="header-actions">
-        <div v-if="isSignedIn" class="user-pill">{{ profileLabel }}</div>
+        <router-link v-if="isSignedIn && profile?.id" class="user-pill" :to="profileLink">
+          {{ profileLabel }}
+        </router-link>
+        <div v-else-if="isSignedIn" class="user-pill">{{ profileLabel }}</div>
         <button class="gear-button" type="button" aria-label="Theme settings" @click="openThemeDialog">
           <Settings aria-hidden="true" class="gear-icon" />
         </button>
