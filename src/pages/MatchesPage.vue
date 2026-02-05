@@ -1919,7 +1919,7 @@ onMounted(() => {
 }
 
 .score-grid :deep(.grid-cell-error) {
-  background: rgba(183, 56, 45, 0.15);
+  background: var(--status-danger-border);
 }
 
 .score-grid :deep(.game-label) {

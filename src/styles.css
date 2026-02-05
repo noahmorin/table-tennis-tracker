@@ -10,12 +10,7 @@
 body {
   font-family: 'Space Grotesk', sans-serif;
   color: var(--text-primary);
-  background: radial-gradient(
-    circle at top,
-    var(--app-gradient-inner) 0%,
-    var(--app-gradient-mid) 48%,
-    var(--app-gradient-outer) 100%
-  );
+  background: var(--surface-app);
   min-height: 100vh;
 }
 
@@ -40,7 +35,7 @@ body {
   justify-content: space-between;
   padding: var(--space-2xl) var(--space-2xl) var(--space-sm);
   gap: var(--space-sm);
-  background: var(--surface-card);
+  background: var(--surface-bar);
   border-bottom: 1px solid var(--border-subtle);
   box-shadow: var(--shadow-header);
 }
@@ -255,8 +250,8 @@ body {
 }
 
 .auth-toggle__btn.is-active {
-  background: var(--surface-card);
-  color: var(--text-primary);
+  background: var(--brand-primary);
+  color: var(--surface-card);
   box-shadow: var(--shadow-float);
 }
 
@@ -266,7 +261,7 @@ body {
 }
 
 .auth-page .auth-toggle__btn.is-active {
-  color: var(--brand-primary);
+  color: var(--surface-card);
 }
 
 .field {
@@ -389,7 +384,7 @@ body {
   right: 0;
   display: grid;
   grid-template-columns: repeat(3, 1fr);
-  background: var(--surface-white);
+  background: var(--surface-bar);
   border-top: 1px solid var(--border-subtle);
   padding: 10px 14px 18px;
   gap: var(--space-2xs);

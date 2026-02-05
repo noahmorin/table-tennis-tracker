@@ -12,13 +12,13 @@ const { isAuthenticated, profile, user, signOut } = useAuth();
 const router = useRouter();
 
 type ThemeMode = 'light' | 'dark';
-type ThemeColor = 'red' | 'blue' | 'green' | 'purple' | 'pink' | 'yellow' | 'orange';
+type ThemeColor = 'red' | 'blue' | 'green' | 'purple' | 'pink' | 'orange';
 
 const themeKey = 'ttt-theme';
 const themeColorKey = 'ttt-theme-color';
 
 const theme = ref<ThemeMode | null>(null);
-const themeColor = ref<ThemeColor>('green');
+const themeColor = ref<ThemeColor>('blue');
 const dialogRef = ref<HTMLDialogElement | null>(null);
 const bugDialogRef = ref<HTMLDialogElement | null>(null);
 const bugTitle = ref('');
@@ -37,13 +37,12 @@ const profileLabel = computed(
 const profileLink = computed(() => (profile.value?.id ? `/players/${profile.value.id}` : ''));
 
 const themeColors: Array<{ id: ThemeColor; label: string; swatch: string }> = [
-  { id: 'red', label: 'Red', swatch: '#c0392b' },
+  { id: 'red', label: 'Red', swatch: '#e53935' },
   { id: 'blue', label: 'Blue', swatch: '#1e5aa8' },
   { id: 'green', label: 'Green', swatch: '#1f7a4d' },
   { id: 'purple', label: 'Purple', swatch: '#6a3fa0' },
   { id: 'pink', label: 'Pink', swatch: '#c1467f' },
-  { id: 'yellow', label: 'Yellow', swatch: '#b58a00' },
-  { id: 'orange', label: 'Orange', swatch: '#d36c1f' }
+  { id: 'orange', label: 'Orange', swatch: '#f57c00' }
 ];
 
 const applyTheme = (value: ThemeMode | null) => {
@@ -69,8 +68,7 @@ const syncFromStorageOrSystem = () => {
     theme.value = stored;
     applyTheme(stored);
   } else {
-    const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
-    theme.value = prefersDark ? 'dark' : 'light';
+    theme.value = 'dark';
     applyTheme(theme.value);
   }
 
@@ -78,7 +76,7 @@ const syncFromStorageOrSystem = () => {
   if (storedColor && themeColors.some((option) => option.id === storedColor)) {
     themeColor.value = storedColor;
   } else {
-    themeColor.value = 'green';
+    themeColor.value = 'blue';
   }
   applyThemeColor(themeColor.value);
 };
