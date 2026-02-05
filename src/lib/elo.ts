@@ -14,6 +14,13 @@ type EloState = {
   matchesPlayed: number;
 };
 
+type ScoreWeights = {
+  outcome: number;
+  games: number;
+  points: number;
+  total: number;
+};
+
 const compareMatches = (a: MatchRow, b: MatchRow) => {
   if (a.match_date !== b.match_date) {
     return a.match_date < b.match_date ? -1 : 1;
@@ -41,6 +48,39 @@ const resolveK = () => (eloConfig.kFactor > 0 ? eloConfig.kFactor : 24);
 const expectedScore = (rating: number, opponentRating: number) => {
   const scale = resolveScale();
   return 1 / (1 + Math.pow(10, (opponentRating - rating) / scale));
+};
+
+const clamp01 = (value: number) => Math.min(1, Math.max(0, value));
+
+const resolveScoreWeights = (): ScoreWeights => {
+  const outcome =
+    Number.isFinite(eloConfig.scoreWeights.outcome) && eloConfig.scoreWeights.outcome > 0
+      ? eloConfig.scoreWeights.outcome
+      : 0;
+  const games =
+    Number.isFinite(eloConfig.scoreWeights.games) && eloConfig.scoreWeights.games > 0
+      ? eloConfig.scoreWeights.games
+      : 0;
+  const points =
+    Number.isFinite(eloConfig.scoreWeights.points) && eloConfig.scoreWeights.points > 0
+      ? eloConfig.scoreWeights.points
+      : 0;
+  const total = outcome + games + points;
+  if (total <= 0) {
+    return { outcome: 1, games: 0, points: 0, total: 1 };
+  }
+  return { outcome, games, points, total };
+};
+
+const resolveMatchScore = (totals: MatchGameTotals, weights: ScoreWeights) => {
+  const outcomeScore =
+    totals.sideAWins === totals.sideBWins ? 0.5 : totals.sideAWins > totals.sideBWins ? 1 : 0;
+  const gameScore = totals.totalGames > 0 ? totals.sideAWins / totals.totalGames : 0.5;
+  const totalPoints = totals.sideAPoints + totals.sideBPoints;
+  const pointScore = totalPoints > 0 ? totals.sideAPoints / totalPoints : 0.5;
+  const weighted =
+    outcomeScore * weights.outcome + gameScore * weights.games + pointScore * weights.points;
+  return clamp01(weighted / weights.total);
 };
 
 export const buildMatchGameTotals = (matches: MatchRow[], games: GameRow[]) => {
@@ -88,6 +128,7 @@ export const calculateEloRatings = (
   seedPlayerIds: string[] = []
 ) => {
   const states = new Map<string, EloState>();
+  const scoreWeights = resolveScoreWeights();
 
   const ensureState = (playerId: string) => {
     const existing = states.get(playerId);
@@ -134,8 +175,8 @@ export const calculateEloRatings = (
     const teamBRating =
       teamBStates.reduce((sum, entry) => sum + entry.state.rating, 0) / teamBStates.length;
 
-    const scoreA = totals.sideAWins / totals.totalGames;
-    const scoreB = totals.sideBWins / totals.totalGames;
+    const scoreA = resolveMatchScore(totals, scoreWeights);
+    const scoreB = 1 - scoreA;
     const expectedA = expectedScore(teamARating, teamBRating);
     const expectedB = 1 - expectedA;
     const formatWeight = resolveFormatWeight(match.match_format, match.match_type);
@@ -181,6 +222,7 @@ export const calculateEloMatchStates = (
 ): EloMatchState[] => {
   const states = new Map<string, EloState>();
   const entries: EloMatchState[] = [];
+  const scoreWeights = resolveScoreWeights();
 
   const ensureState = (playerId: string) => {
     const existing = states.get(playerId);
@@ -238,8 +280,8 @@ export const calculateEloMatchStates = (
     const teamBRating =
       teamBStates.reduce((sum, entry) => sum + entry.state.rating, 0) / teamBStates.length;
 
-    const scoreA = totals.sideAWins / totals.totalGames;
-    const scoreB = totals.sideBWins / totals.totalGames;
+    const scoreA = resolveMatchScore(totals, scoreWeights);
+    const scoreB = 1 - scoreA;
     const expectedA = expectedScore(teamARating, teamBRating);
     const expectedB = 1 - expectedA;
     const formatWeight = resolveFormatWeight(match.match_format, match.match_type);
@@ -287,6 +329,7 @@ export const calculateEloDeltasForPlayer = (
 ) => {
   const states = new Map<string, EloState>();
   const deltas = new Map<string, number>();
+  const scoreWeights = resolveScoreWeights();
 
   const ensureState = (id: string) => {
     const existing = states.get(id);
@@ -331,8 +374,8 @@ export const calculateEloDeltasForPlayer = (
     const teamBRating =
       teamBStates.reduce((sum, entry) => sum + entry.state.rating, 0) / teamBStates.length;
 
-    const scoreA = totals.sideAWins / totals.totalGames;
-    const scoreB = totals.sideBWins / totals.totalGames;
+    const scoreA = resolveMatchScore(totals, scoreWeights);
+    const scoreB = 1 - scoreA;
     const expectedA = expectedScore(teamARating, teamBRating);
     const expectedB = 1 - expectedA;
     const formatWeight = resolveFormatWeight(match.match_format, match.match_type);
