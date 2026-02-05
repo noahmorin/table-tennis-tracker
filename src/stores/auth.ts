@@ -32,6 +32,8 @@ const isAdmin = computed(() => profile.value?.is_admin ?? false);
 
 let initPromise: Promise<void> | null = null;
 let authSubscription: { unsubscribe: () => void } | null = null;
+let scheduledProfileLoadTimeout: number | null = null;
+let profileLoadCounter = 0;
 
 const buildEmailRedirectUrl = () => {
   if (typeof window === 'undefined') {
@@ -60,7 +62,35 @@ const writeCachedProfileId = (authUserId: string, value: string | null) => {
   }
   localStorage.setItem(key, value);
 };
+
+const clearScheduledProfileLoad = () => {
+  if (scheduledProfileLoadTimeout === null) {
+    return;
+  }
+  if (typeof window !== 'undefined') {
+    window.clearTimeout(scheduledProfileLoadTimeout);
+  } else {
+    clearTimeout(scheduledProfileLoadTimeout);
+  }
+  scheduledProfileLoadTimeout = null;
+};
+
+const scheduleProfileLoad = (authUser: User) => {
+  clearScheduledProfileLoad();
+
+  if (typeof window === 'undefined') {
+    void loadProfile(authUser);
+    return;
+  }
+
+  scheduledProfileLoadTimeout = window.setTimeout(() => {
+    scheduledProfileLoadTimeout = null;
+    void loadProfile(authUser);
+  }, 0);
+};
+
 const loadProfile = async (authUser: User) => {
+  const loadId = (profileLoadCounter += 1);
   profileLoading.value = true;
   profileError.value = null;
 
@@ -69,6 +99,15 @@ const loadProfile = async (authUser: User) => {
     .select('id, username, display_name, first_name, last_name, is_admin, is_active')
     .eq('auth_user_id', authUser.id)
     .maybeSingle();
+
+  if (loadId !== profileLoadCounter) {
+    return;
+  }
+
+  if (session.value?.user?.id !== authUser.id) {
+    profileLoading.value = false;
+    return;
+  }
 
   if (error && error.code !== 'PGRST116') {
     profileError.value = error.message;
@@ -110,21 +149,36 @@ const initAuth = async () => {
       profile.value = null;
       profileError.value = null;
       cachedProfileId.value = null;
+      clearScheduledProfileLoad();
+      profileLoading.value = false;
     }
 
     authLoading.value = false;
 
     if (!authSubscription) {
-      const { data: authListener } = supabase.auth.onAuthStateChange(async (_event, nextSession) => {
+      const { data: authListener } = supabase.auth.onAuthStateChange((_event, nextSession) => {
+        const previousAuthUserId = session.value?.user?.id ?? null;
         session.value = nextSession;
 
         if (nextSession?.user) {
-          cachedProfileId.value = readCachedProfileId(nextSession.user.id);
-          await loadProfile(nextSession.user);
+          const authUserId = nextSession.user.id;
+          cachedProfileId.value = readCachedProfileId(authUserId);
+
+          if (previousAuthUserId !== authUserId) {
+            profile.value = null;
+            profileError.value = null;
+            profileLoading.value = false;
+          }
+
+          if (!profile.value && !profileLoading.value) {
+            scheduleProfileLoad(nextSession.user);
+          }
         } else {
           profile.value = null;
           profileError.value = null;
           cachedProfileId.value = null;
+          clearScheduledProfileLoad();
+          profileLoading.value = false;
         }
 
         authLoading.value = false;
@@ -171,6 +225,8 @@ const signOut = async () => {
   profile.value = null;
   profileError.value = null;
   cachedProfileId.value = null;
+  clearScheduledProfileLoad();
+  profileLoading.value = false;
 };
 
 const refreshProfile = async () => {
