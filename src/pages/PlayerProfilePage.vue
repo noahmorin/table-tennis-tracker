@@ -101,6 +101,7 @@ type CompareMetric = {
   label: string;
   direction?: CompareDirection;
   value: (stats: PlayerStats) => number;
+  compareValue?: (stats: PlayerStats) => number;
   format: (value: number, stats: PlayerStats) => string;
 };
 
@@ -567,6 +568,7 @@ const buildPlayerStats = (
 
     const outcome: 'W' | 'L' = matchWins >= matchLosses ? 'W' : 'L';
     const maxGames = resolveMaxGames(match.match_format);
+    const winsNeeded = Math.floor(maxGames / 2) + 1;
     const isDecidingMatch = totals.totalGames === maxGames;
     if (outcome === 'W') {
       wins += 1;
@@ -601,15 +603,17 @@ const buildPlayerStats = (
 
     const matchGames = gamesByMatchId.get(match.id);
     if (matchGames && matchGames.length) {
-      const firstGame = matchGames[0];
-      const firstGameWon = isSideA
-        ? firstGame.side_a_score > firstGame.side_b_score
-        : firstGame.side_b_score > firstGame.side_a_score;
+      const didWinGame = (game: GameRow) =>
+        isSideA ? game.side_a_score > game.side_b_score : game.side_b_score > game.side_a_score;
+      const firstGameWon = didWinGame(matchGames[0]);
       if (outcome === 'W' && !firstGameWon) {
         comebackWins += 1;
       }
-      if (outcome === 'L' && firstGameWon) {
-        blownLeads += 1;
+      if (outcome === 'L' && winsNeeded > 1 && matchGames.length >= winsNeeded - 1) {
+        const openingWins = matchGames.slice(0, winsNeeded - 1).every(didWinGame);
+        if (openingWins) {
+          blownLeads += 1;
+        }
       }
 
       matchGames.forEach((game) => {
@@ -1162,9 +1166,15 @@ const buildCompareRows = (
     const direction = metric.direction ?? 'higher';
     const leftRaw = leftActive ? metric.value(leftStats) : Number.NaN;
     const rightRaw = rightActive ? metric.value(rightStats) : Number.NaN;
+    const leftCompare = leftActive
+      ? (metric.compareValue ? metric.compareValue(leftStats) : leftRaw)
+      : Number.NaN;
+    const rightCompare = rightActive
+      ? (metric.compareValue ? metric.compareValue(rightStats) : rightRaw)
+      : Number.NaN;
     const leftValue = leftActive ? metric.format(leftRaw, leftStats) : '-';
     const rightValue = rightActive ? metric.format(rightRaw, rightStats) : '-';
-    const { leftClass, rightClass } = resolveCompareClasses(leftRaw, rightRaw, direction);
+    const { leftClass, rightClass } = resolveCompareClasses(leftCompare, rightCompare, direction);
     return {
       id: metric.id,
       label: metric.label,
@@ -1340,6 +1350,7 @@ const eloCompareMetrics: CompareMetric[] = [
     id: 'biggest-elo-gain',
     label: 'Biggest Elo gain',
     value: (stats) => stats.biggestEloGain?.delta ?? Number.NaN,
+    compareValue: (stats) => Math.round(stats.biggestEloGain?.delta ?? Number.NaN),
     format: (value) => formatSigned(Math.round(value)),
     direction: 'higher'
   },
@@ -1347,6 +1358,7 @@ const eloCompareMetrics: CompareMetric[] = [
     id: 'biggest-elo-loss',
     label: 'Biggest Elo loss',
     value: (stats) => stats.biggestEloLoss?.delta ?? Number.NaN,
+    compareValue: (stats) => Math.round(stats.biggestEloLoss?.delta ?? Number.NaN),
     format: (value) => formatSigned(Math.round(value)),
     direction: 'higher'
   }
