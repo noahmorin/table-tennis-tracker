@@ -324,6 +324,7 @@ const validateMatch = () => {
 
     const winnerScore = Math.max(score1, score2);
     const loserScore = Math.min(score1, score2);
+    const margin = winnerScore - loserScore;
 
     if (winnerScore < 11) {
       errors.push(`Game ${i} winner must reach at least 11 points.`);
@@ -332,7 +333,14 @@ const validateMatch = () => {
       continue;
     }
 
-    if (winnerScore - loserScore < 2) {
+    if (loserScore >= 10) {
+      if (margin !== 2) {
+        errors.push(`Game ${i} in deuce must be won by exactly 2 points.`);
+        nextCellErrors[cellKey1] = 'Deuce requires +2.';
+        nextCellErrors[cellKey2] = 'Deuce requires +2.';
+        continue;
+      }
+    } else if (margin < 2) {
       errors.push(`Game ${i} must be won by 2 points.`);
       nextCellErrors[cellKey1] = 'Must win by 2.';
       nextCellErrors[cellKey2] = 'Must win by 2.';
