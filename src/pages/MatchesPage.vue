@@ -1151,8 +1151,7 @@ onMounted(() => {
             >
               {{ targetPlayerLabel }}
             </router-link>
-            <span v-else>{{ targetPlayerLabel }}</span>
-            's matches
+            <span v-else>{{ targetPlayerLabel }}</span>'s matches
           </h2>
           <h2 v-else>Matches</h2>
           <p v-if="!targetPlayerLabel">Viewing match history.</p>

@@ -68,9 +68,9 @@
     --brand-tint-12: rgba(125, 214, 161, 0.12);
     --brand-tint-20: rgba(125, 214, 161, 0.2);
     --surface-glass: rgba(20, 27, 24, 0.75);
-    --app-gradient-inner: #0c110f;
-    --app-gradient-mid: #0f1512;
-    --app-gradient-outer: #151d19;
+    --app-gradient-inner: #090d0b;
+    --app-gradient-mid: #0b100d;
+    --app-gradient-outer: #101613;
   }
 }
 
@@ -109,24 +109,24 @@
   --brand-tint-12: rgba(125, 214, 161, 0.12);
   --brand-tint-20: rgba(125, 214, 161, 0.2);
   --surface-glass: rgba(20, 27, 24, 0.75);
-  --app-gradient-inner: #0c110f;
-  --app-gradient-mid: #0f1512;
-  --app-gradient-outer: #151d19;
+  --app-gradient-inner: #090d0b;
+  --app-gradient-mid: #0b100d;
+  --app-gradient-outer: #101613;
 }
 
 @supports (color: color-mix(in srgb, white, black)) {
   @media (prefers-color-scheme: dark) {
     :root:not([data-theme]) {
-      --app-gradient-inner: color-mix(in srgb, var(--surface-white) 96%, var(--brand-primary) 4%);
-      --app-gradient-mid: color-mix(in srgb, var(--surface-app) 92%, var(--brand-primary) 8%);
-      --app-gradient-outer: color-mix(in srgb, var(--surface-app-accent) 88%, var(--brand-primary) 12%);
+      --app-gradient-inner: color-mix(in srgb, var(--surface-white) 98%, var(--brand-primary) 2%);
+      --app-gradient-mid: color-mix(in srgb, var(--surface-app) 96%, var(--brand-primary) 4%);
+      --app-gradient-outer: color-mix(in srgb, var(--surface-app-accent) 94%, var(--brand-primary) 6%);
     }
   }
 
   :root[data-theme='dark'] {
-    --app-gradient-inner: color-mix(in srgb, var(--surface-white) 96%, var(--brand-primary) 4%);
-    --app-gradient-mid: color-mix(in srgb, var(--surface-app) 92%, var(--brand-primary) 8%);
-    --app-gradient-outer: color-mix(in srgb, var(--surface-app-accent) 88%, var(--brand-primary) 12%);
+    --app-gradient-inner: color-mix(in srgb, var(--surface-white) 98%, var(--brand-primary) 2%);
+    --app-gradient-mid: color-mix(in srgb, var(--surface-app) 96%, var(--brand-primary) 4%);
+    --app-gradient-outer: color-mix(in srgb, var(--surface-app-accent) 94%, var(--brand-primary) 6%);
   }
 }
 

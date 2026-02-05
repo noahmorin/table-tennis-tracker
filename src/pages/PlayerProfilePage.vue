@@ -4,13 +4,14 @@ import { useRoute, useRouter, type RouteLocationRaw } from 'vue-router';
 import { getProfileById, listProfiles } from '../lib/data/profiles';
 import { listMatches } from '../lib/data/matches';
 import { listGamesByMatchIds } from '../lib/data/games';
-import type { GameRow, MatchRow, ProfileRow } from '../lib/data/types';
+import type { GameRow, MatchRow, MatchType, ProfileRow } from '../lib/data/types';
 import {
   buildMatchGameTotals,
   calculateEloDeltasForPlayer,
   calculateEloRatings
 } from '../lib/elo';
 import { eloConfig } from '../config/eloConfig';
+import { useAuth } from '../stores/auth';
 import { useMatchMode } from '../stores/matchMode';
 
 type TabId = 'overview' | 'matches' | 'elo' | 'streaks' | 'points';
@@ -93,6 +94,31 @@ type StatTile = {
   to?: RouteLocationRaw;
 };
 
+type CompareDirection = 'higher' | 'lower';
+
+type CompareMetric = {
+  id: string;
+  label: string;
+  direction?: CompareDirection;
+  value: (stats: PlayerStats) => number;
+  format: (value: number, stats: PlayerStats) => string;
+};
+
+type CompareRow = {
+  id: string;
+  label: string;
+  leftValue: string;
+  rightValue: string;
+  leftClass: string;
+  rightClass: string;
+};
+
+type CompareSection = {
+  id: string;
+  label: string;
+  rows: CompareRow[];
+};
+
 const route = useRoute();
 const router = useRouter();
 
@@ -106,6 +132,7 @@ const tabs: Array<{ id: TabId; label: string }> = [
 
 const activeTab = ref<TabId>('overview');
 const dateFilter = ref<DateFilterOption>('all');
+const { profileId } = useAuth();
 const { matchMode, isDoubles, setMatchMode } = useMatchMode();
 
 const loading = ref(false);
@@ -114,6 +141,18 @@ const profile = ref<ProfileRow | null>(null);
 const profiles = ref<ProfileRow[]>([]);
 const matches = ref<MatchRow[]>([]);
 const games = ref<GameRow[]>([]);
+const compareDialogRef = ref<HTMLDialogElement | null>(null);
+const compareOpen = ref(false);
+const compareMatchMode = ref<MatchType>('singles');
+const compareDateFilter = ref<DateFilterOption>('all');
+const compareLeftPlayerId = ref('');
+const compareRightPlayerId = ref('');
+const compareMatchRows = ref<MatchRow[]>([]);
+const compareGameRows = ref<GameRow[]>([]);
+const compareLoading = ref(false);
+const compareError = ref<string | null>(null);
+const lastCompareChange = ref<'left' | 'right' | null>(null);
+let compareLoadCounter = 0;
 
 const targetPlayerId = computed(() => (typeof route.params.id === 'string' ? route.params.id : ''));
 
@@ -138,10 +177,44 @@ const playerMap = computed(() => {
   return map;
 });
 
+const activeProfiles = computed(() => profiles.value.filter((player) => player.is_active));
+
 const formatPlayerLabel = (player: ProfileRow) => {
   const base = player.display_name?.trim() || player.username;
   return player.is_active ? base : `${base} (inactive)`;
 };
+
+const compareLeftOptions = computed(() =>
+  activeProfiles.value.filter((player) => player.id !== compareRightPlayerId.value)
+);
+
+const compareRightOptions = computed(() =>
+  activeProfiles.value.filter((player) => player.id !== compareLeftPlayerId.value)
+);
+
+const compareLeftLabel = computed(() => {
+  const id = compareLeftPlayerId.value;
+  if (!id) {
+    return 'Select player';
+  }
+  if (profileId.value && id === profileId.value) {
+    return 'You';
+  }
+  const player = playerMap.value.get(id);
+  return player ? formatPlayerLabel(player) : 'Unknown player';
+});
+
+const compareRightLabel = computed(() => {
+  const id = compareRightPlayerId.value;
+  if (!id) {
+    return 'Select player';
+  }
+  if (profileId.value && id === profileId.value) {
+    return 'You';
+  }
+  const player = playerMap.value.get(id);
+  return player ? formatPlayerLabel(player) : 'Unknown player';
+});
 
 const resolveOpponentName = (id: string) => {
   const player = playerMap.value.get(id);
@@ -230,6 +303,17 @@ const dateRange = computed(() => {
   return { from: formatDateInput(fromDate), to: formatDateInput(today) };
 });
 
+const compareDateRange = computed(() => {
+  if (compareDateFilter.value === 'all') {
+    return { from: null as string | null, to: null as string | null };
+  }
+  const days = Number(compareDateFilter.value);
+  const today = new Date();
+  const fromDate = new Date();
+  fromDate.setDate(today.getDate() - days);
+  return { from: formatDateInput(fromDate), to: formatDateInput(today) };
+});
+
 const formatDate = (value: string) => {
   if (!value) {
     return '';
@@ -285,8 +369,22 @@ const filteredMatches = computed(() => {
   );
 });
 
-const stats = computed(() => {
-  const targetId = targetPlayerId.value;
+const compareFilteredMatches = computed(() => {
+  const range = compareDateRange.value;
+  if (!range.from || !range.to) {
+    return compareMatchRows.value;
+  }
+  return compareMatchRows.value.filter(
+    (match) => match.match_date >= range.from! && match.match_date <= range.to!
+  );
+});
+
+const buildPlayerStats = (
+  targetId: string,
+  matchRows: MatchRow[],
+  gameRows: GameRow[],
+  doublesMode: boolean
+) => {
   if (!targetId) {
     return {
       matchesPlayed: 0,
@@ -351,8 +449,8 @@ const stats = computed(() => {
     };
   }
 
-  const matchList = filteredMatches.value;
-  const totalsByMatch = buildMatchGameTotals(matchList, games.value);
+  const matchList = matchRows;
+  const totalsByMatch = buildMatchGameTotals(matchList, gameRows);
   const seededPlayerIds = profiles.value.map((player) => player.id);
   const eloByPlayer = calculateEloRatings(matchList, totalsByMatch, seededPlayerIds);
   const matchCountsByPlayer = new Map<string, number>();
@@ -370,7 +468,7 @@ const stats = computed(() => {
     });
   });
 
-  games.value.forEach((game) => {
+  gameRows.forEach((game) => {
     const list = gamesByMatchId.get(game.match_id);
     if (list) {
       list.push(game);
@@ -565,7 +663,7 @@ const stats = computed(() => {
 
     opponentMap.set(opponentKey, record);
 
-    if (isDoubles.value) {
+    if (doublesMode) {
       const teamIds = resolveTeamIds(match, side);
       teamIds
         .filter((id) => id !== targetId)
@@ -976,6 +1074,559 @@ const stats = computed(() => {
     biggestEloLoss,
     lastMatchDate
   };
+};
+
+type PlayerStats = ReturnType<typeof buildPlayerStats>;
+
+const stats = computed(() =>
+  buildPlayerStats(targetPlayerId.value, filteredMatches.value, games.value, isDoubles.value)
+);
+
+const compareIsDoubles = computed(() => compareMatchMode.value === 'doubles');
+const compareReady = computed(
+  () => Boolean(compareLeftPlayerId.value) && Boolean(compareRightPlayerId.value)
+);
+
+const compareLeftStats = computed(() =>
+  buildPlayerStats(
+    compareLeftPlayerId.value,
+    compareFilteredMatches.value,
+    compareGameRows.value,
+    compareIsDoubles.value
+  )
+);
+
+const compareRightStats = computed(() =>
+  buildPlayerStats(
+    compareRightPlayerId.value,
+    compareFilteredMatches.value,
+    compareGameRows.value,
+    compareIsDoubles.value
+  )
+);
+
+const compareHeadToHeadMatches = computed(() => {
+  if (!compareLeftPlayerId.value || !compareRightPlayerId.value) {
+    return [];
+  }
+  return compareFilteredMatches.value.filter((match) => {
+    const leftSide = resolvePlayerSide(match, compareLeftPlayerId.value);
+    const rightSide = resolvePlayerSide(match, compareRightPlayerId.value);
+    return Boolean(leftSide && rightSide && leftSide !== rightSide);
+  });
+});
+
+const compareHeadToHeadLeftStats = computed(() =>
+  buildPlayerStats(
+    compareLeftPlayerId.value,
+    compareHeadToHeadMatches.value,
+    compareGameRows.value,
+    false
+  )
+);
+
+const compareHeadToHeadRightStats = computed(() =>
+  buildPlayerStats(
+    compareRightPlayerId.value,
+    compareHeadToHeadMatches.value,
+    compareGameRows.value,
+    false
+  )
+);
+
+const resolveCompareClasses = (
+  leftValue: number,
+  rightValue: number,
+  direction: CompareDirection
+) => {
+  if (!Number.isFinite(leftValue) || !Number.isFinite(rightValue)) {
+    return { leftClass: '', rightClass: '' };
+  }
+  if (leftValue === rightValue) {
+    return { leftClass: 'is-even', rightClass: 'is-even' };
+  }
+  const leftBetter = direction === 'higher' ? leftValue > rightValue : leftValue < rightValue;
+  return leftBetter
+    ? { leftClass: 'is-win', rightClass: 'is-loss' }
+    : { leftClass: 'is-loss', rightClass: 'is-win' };
+};
+
+const buildCompareRows = (
+  metrics: CompareMetric[],
+  leftStats: PlayerStats,
+  rightStats: PlayerStats,
+  leftActive: boolean,
+  rightActive: boolean
+): CompareRow[] =>
+  metrics.map((metric) => {
+    const direction = metric.direction ?? 'higher';
+    const leftRaw = leftActive ? metric.value(leftStats) : Number.NaN;
+    const rightRaw = rightActive ? metric.value(rightStats) : Number.NaN;
+    const leftValue = leftActive ? metric.format(leftRaw, leftStats) : '-';
+    const rightValue = rightActive ? metric.format(rightRaw, rightStats) : '-';
+    const { leftClass, rightClass } = resolveCompareClasses(leftRaw, rightRaw, direction);
+    return {
+      id: metric.id,
+      label: metric.label,
+      leftValue,
+      rightValue,
+      leftClass,
+      rightClass
+    };
+  });
+
+const overviewCompareMetrics: CompareMetric[] = [
+  {
+    id: 'matches-played',
+    label: 'Matches played',
+    value: (stats) => stats.matchesPlayed,
+    format: (value) => formatNumber(value),
+    direction: 'higher'
+  },
+  {
+    id: 'match-wins',
+    label: 'Match wins',
+    value: (stats) => stats.wins,
+    format: (value) => formatNumber(value),
+    direction: 'higher'
+  },
+  {
+    id: 'match-losses',
+    label: 'Match losses',
+    value: (stats) => stats.losses,
+    format: (value) => formatNumber(value),
+    direction: 'lower'
+  },
+  {
+    id: 'win-pct',
+    label: 'Win %',
+    value: (stats) => stats.winPct,
+    format: (value, stats) => formatPct(value, stats.matchesPlayed),
+    direction: 'higher'
+  },
+  {
+    id: 'game-diff',
+    label: 'Game diff',
+    value: (stats) => stats.gamesDiff,
+    format: (value) => formatSigned(value),
+    direction: 'higher'
+  },
+  {
+    id: 'point-diff',
+    label: 'Point diff',
+    value: (stats) => stats.pointDiff,
+    format: (value) => formatSigned(value),
+    direction: 'higher'
+  },
+  {
+    id: 'deciding-win-pct',
+    label: 'Deciding-game win %',
+    value: (stats) => (stats.decidingMatches ? stats.decidingGameWins / stats.decidingMatches : 0),
+    format: (value, stats) => formatPct(value, stats.decidingMatches),
+    direction: 'higher'
+  }
+];
+
+const matchesCompareMetrics: CompareMetric[] = [
+  {
+    id: 'games-won',
+    label: 'Games won',
+    value: (stats) => stats.gamesWon,
+    format: (value) => formatNumber(value),
+    direction: 'higher'
+  },
+  {
+    id: 'games-lost',
+    label: 'Games lost',
+    value: (stats) => stats.gamesLost,
+    format: (value) => formatNumber(value),
+    direction: 'lower'
+  },
+  {
+    id: 'straight-game-wins',
+    label: 'Straight-game wins',
+    value: (stats) => stats.straightGameWins,
+    format: (value) => formatNumber(value),
+    direction: 'higher'
+  },
+  {
+    id: 'deciding-game-wins',
+    label: 'Deciding-game wins',
+    value: (stats) => stats.decidingGameWins,
+    format: (value) => formatNumber(value),
+    direction: 'higher'
+  },
+  {
+    id: 'deciding-game-losses',
+    label: 'Deciding-game losses',
+    value: (stats) => stats.decidingGameLosses,
+    format: (value) => formatNumber(value),
+    direction: 'lower'
+  },
+  {
+    id: 'deciding-game-rate',
+    label: 'Deciding-game rate',
+    value: (stats) => (stats.matchesPlayed ? stats.decidingMatches / stats.matchesPlayed : 0),
+    format: (value, stats) => formatPct(value, stats.matchesPlayed),
+    direction: 'higher'
+  },
+  {
+    id: 'comeback-wins',
+    label: 'Comeback wins',
+    value: (stats) => stats.comebackWins,
+    format: (value) => formatNumber(value),
+    direction: 'higher'
+  },
+  {
+    id: 'blown-leads',
+    label: 'Blown leads',
+    value: (stats) => stats.blownLeads,
+    format: (value) => formatNumber(value),
+    direction: 'lower'
+  }
+];
+
+const eloCompareMetrics: CompareMetric[] = [
+  {
+    id: 'current-elo',
+    label: 'Current Elo',
+    value: (stats) => stats.currentElo,
+    format: (value) => formatNumber(Math.round(value)),
+    direction: 'higher'
+  },
+  {
+    id: 'peak-elo',
+    label: 'Peak Elo',
+    value: (stats) => stats.highestElo,
+    format: (value) => formatNumber(Math.round(value)),
+    direction: 'higher'
+  },
+  {
+    id: 'lowest-elo',
+    label: 'Lowest Elo',
+    value: (stats) => stats.lowestElo,
+    format: (value) => formatNumber(Math.round(value)),
+    direction: 'higher'
+  },
+  {
+    id: 'elo-last-match',
+    label: 'Elo change (last match)',
+    value: (stats) => stats.lastMatchEloChange,
+    format: (value) => formatSigned(value, 1),
+    direction: 'higher'
+  },
+  {
+    id: 'elo-last-10',
+    label: 'Elo change (last 10)',
+    value: (stats) => stats.lastTenMatchEloChange,
+    format: (value) => formatSigned(value, 1),
+    direction: 'higher'
+  },
+  {
+    id: 'elo-avg-change',
+    label: 'Avg Elo change / match',
+    value: (stats) => stats.avgEloChange,
+    format: (value) => formatSigned(value, 1),
+    direction: 'higher'
+  },
+  {
+    id: 'matches-rated',
+    label: 'Matches rated',
+    value: (stats) => stats.totalMatchesRated,
+    format: (value) => formatNumber(value),
+    direction: 'higher'
+  },
+  {
+    id: 'biggest-elo-gain',
+    label: 'Biggest Elo gain',
+    value: (stats) => stats.biggestEloGain?.delta ?? Number.NaN,
+    format: (value) => formatSigned(Math.round(value)),
+    direction: 'higher'
+  },
+  {
+    id: 'biggest-elo-loss',
+    label: 'Biggest Elo loss',
+    value: (stats) => stats.biggestEloLoss?.delta ?? Number.NaN,
+    format: (value) => formatSigned(Math.round(value)),
+    direction: 'higher'
+  }
+];
+
+const streakCompareMetrics: CompareMetric[] = [
+  {
+    id: 'current-win-streak',
+    label: 'Current win streak',
+    value: (stats) => stats.currentWinStreak,
+    format: (value) => formatNumber(value),
+    direction: 'higher'
+  },
+  {
+    id: 'current-loss-streak',
+    label: 'Current losing streak',
+    value: (stats) => stats.currentLossStreak,
+    format: (value) => formatNumber(value),
+    direction: 'lower'
+  },
+  {
+    id: 'longest-win-streak',
+    label: 'Longest win streak',
+    value: (stats) => stats.longestWinStreak,
+    format: (value) => formatNumber(value),
+    direction: 'higher'
+  },
+  {
+    id: 'longest-loss-streak',
+    label: 'Longest losing streak',
+    value: (stats) => stats.longestLossStreak,
+    format: (value) => formatNumber(value),
+    direction: 'lower'
+  },
+  {
+    id: 'wins-last-5',
+    label: 'Wins (last 5)',
+    value: (stats) => stats.winsLast5,
+    format: (value) => formatNumber(value),
+    direction: 'higher'
+  },
+  {
+    id: 'wins-last-10',
+    label: 'Wins (last 10)',
+    value: (stats) => stats.winsLast10,
+    format: (value) => formatNumber(value),
+    direction: 'higher'
+  }
+];
+
+const pointsCompareMetrics: CompareMetric[] = [
+  {
+    id: 'points-won',
+    label: 'Points won',
+    value: (stats) => stats.pointsFor,
+    format: (value) => formatNumber(value),
+    direction: 'higher'
+  },
+  {
+    id: 'points-lost',
+    label: 'Points lost',
+    value: (stats) => stats.pointsAgainst,
+    format: (value) => formatNumber(value),
+    direction: 'lower'
+  },
+  {
+    id: 'point-diff',
+    label: 'Point diff',
+    value: (stats) => stats.pointDiff,
+    format: (value) => formatSigned(value),
+    direction: 'higher'
+  },
+  {
+    id: 'avg-points-won',
+    label: 'Avg points won / game',
+    value: (stats) => stats.avgPointsForPerGame,
+    format: (value) => formatNumber(value, 1),
+    direction: 'higher'
+  },
+  {
+    id: 'avg-points-lost',
+    label: 'Avg points lost / game',
+    value: (stats) => stats.avgPointsAgainstPerGame,
+    format: (value) => formatNumber(value, 1),
+    direction: 'lower'
+  },
+  {
+    id: 'avg-point-margin-game',
+    label: 'Avg point margin / game',
+    value: (stats) => stats.avgPointDiffPerGame,
+    format: (value) => formatSigned(value, 1),
+    direction: 'higher'
+  },
+  {
+    id: 'avg-point-margin-match',
+    label: 'Avg point margin / match',
+    value: (stats) => stats.avgPointDiffPerMatch,
+    format: (value) => formatSigned(value, 1),
+    direction: 'higher'
+  },
+  {
+    id: 'avg-margin-wins',
+    label: 'Avg margin (wins)',
+    value: (stats) => stats.avgMarginVictory,
+    format: (value) => formatSigned(value, 1),
+    direction: 'higher'
+  },
+  {
+    id: 'avg-margin-losses',
+    label: 'Avg margin (losses)',
+    value: (stats) => stats.avgMarginLoss,
+    format: (value) => formatSigned(value, 1),
+    direction: 'higher'
+  },
+  {
+    id: 'deuce-games',
+    label: 'Deuce games',
+    value: (stats) => stats.deuceGames,
+    format: (value) => formatNumber(value),
+    direction: 'higher'
+  },
+  {
+    id: 'deuce-rate',
+    label: 'Deuce rate',
+    value: (stats) => {
+      const gamesPlayed = stats.gamesWon + stats.gamesLost;
+      return gamesPlayed ? stats.deuceGames / gamesPlayed : 0;
+    },
+    format: (value, stats) => formatPct(value, stats.gamesWon + stats.gamesLost),
+    direction: 'higher'
+  },
+  {
+    id: 'deuce-win-rate',
+    label: 'Deuce win rate',
+    value: (stats) => (stats.deuceGames ? stats.deuceWins / stats.deuceGames : 0),
+    format: (value, stats) => formatPct(value, stats.deuceGames),
+    direction: 'higher'
+  },
+  {
+    id: 'best-win-margin',
+    label: 'Best win margin',
+    value: (stats) => stats.bestWinMargin,
+    format: (value) => formatSigned(value),
+    direction: 'higher'
+  },
+  {
+    id: 'worst-loss-margin',
+    label: 'Worst loss margin',
+    value: (stats) => stats.worstLossMargin,
+    format: (value) => formatSigned(value),
+    direction: 'higher'
+  }
+];
+
+const headToHeadCompareMetrics: CompareMetric[] = [
+  {
+    id: 'h2h-matches',
+    label: 'H2H matches',
+    value: (stats) => stats.matchesPlayed,
+    format: (value) => formatNumber(value),
+    direction: 'higher'
+  },
+  {
+    id: 'h2h-wins',
+    label: 'H2H wins',
+    value: (stats) => stats.wins,
+    format: (value) => formatNumber(value),
+    direction: 'higher'
+  },
+  {
+    id: 'h2h-losses',
+    label: 'H2H losses',
+    value: (stats) => stats.losses,
+    format: (value) => formatNumber(value),
+    direction: 'lower'
+  },
+  {
+    id: 'h2h-win-pct',
+    label: 'H2H win %',
+    value: (stats) => stats.winPct,
+    format: (value, stats) => formatPct(value, stats.matchesPlayed),
+    direction: 'higher'
+  },
+  {
+    id: 'h2h-games-won',
+    label: 'H2H games won',
+    value: (stats) => stats.gamesWon,
+    format: (value) => formatNumber(value),
+    direction: 'higher'
+  },
+  {
+    id: 'h2h-games-lost',
+    label: 'H2H games lost',
+    value: (stats) => stats.gamesLost,
+    format: (value) => formatNumber(value),
+    direction: 'lower'
+  },
+  {
+    id: 'h2h-game-diff',
+    label: 'H2H game diff',
+    value: (stats) => stats.gamesDiff,
+    format: (value) => formatSigned(value),
+    direction: 'higher'
+  },
+  {
+    id: 'h2h-points-for',
+    label: 'H2H points for',
+    value: (stats) => stats.pointsFor,
+    format: (value) => formatNumber(value),
+    direction: 'higher'
+  },
+  {
+    id: 'h2h-points-against',
+    label: 'H2H points against',
+    value: (stats) => stats.pointsAgainst,
+    format: (value) => formatNumber(value),
+    direction: 'lower'
+  },
+  {
+    id: 'h2h-point-diff',
+    label: 'H2H point diff',
+    value: (stats) => stats.pointDiff,
+    format: (value) => formatSigned(value),
+    direction: 'higher'
+  }
+];
+
+const compareSections = computed<CompareSection[]>(() => {
+  if (!compareOpen.value) {
+    return [];
+  }
+  const leftStats = compareLeftStats.value;
+  const rightStats = compareRightStats.value;
+  const leftActive = Boolean(compareLeftPlayerId.value);
+  const rightActive = Boolean(compareRightPlayerId.value);
+  const sections: CompareSection[] = [];
+
+  if (!compareIsDoubles.value) {
+    sections.push({
+      id: 'head-to-head',
+      label: 'Head-to-head',
+      rows: buildCompareRows(
+        headToHeadCompareMetrics,
+        compareHeadToHeadLeftStats.value,
+        compareHeadToHeadRightStats.value,
+        leftActive,
+        rightActive
+      )
+    });
+  }
+
+  sections.push(
+    {
+      id: 'overview',
+      label: 'Overview',
+      rows: buildCompareRows(overviewCompareMetrics, leftStats, rightStats, leftActive, rightActive)
+    },
+    {
+      id: 'matches',
+      label: 'Matches',
+      rows: buildCompareRows(matchesCompareMetrics, leftStats, rightStats, leftActive, rightActive)
+    },
+    {
+      id: 'elo',
+      label: 'Elo',
+      rows: buildCompareRows(eloCompareMetrics, leftStats, rightStats, leftActive, rightActive)
+    },
+    {
+      id: 'streaks',
+      label: 'Streaks',
+      rows: buildCompareRows(streakCompareMetrics, leftStats, rightStats, leftActive, rightActive)
+    },
+    {
+      id: 'points',
+      label: 'Points',
+      rows: buildCompareRows(pointsCompareMetrics, leftStats, rightStats, leftActive, rightActive)
+    }
+  );
+
+  return sections;
 });
 
 const currentStreakLabel = computed(() => {
@@ -1421,6 +2072,71 @@ const loadData = async () => {
   }
 };
 
+const loadCompareData = async () => {
+  compareLoading.value = true;
+  compareError.value = null;
+  const loadId = (compareLoadCounter += 1);
+
+  try {
+    const matchesResult = await listMatches({
+      includeInactive: false,
+      matchType: compareMatchMode.value
+    });
+    if (loadId !== compareLoadCounter) {
+      return;
+    }
+    if (matchesResult.error) {
+      compareError.value = matchesResult.error;
+      compareLoading.value = false;
+      return;
+    }
+    compareMatchRows.value = matchesResult.data ?? [];
+
+    const matchIds = compareMatchRows.value.map((match) => match.id);
+    const gamesResult = await listGamesByMatchIds(matchIds, { includeInactive: false });
+    if (loadId !== compareLoadCounter) {
+      return;
+    }
+    if (gamesResult.error) {
+      compareError.value = gamesResult.error;
+      compareLoading.value = false;
+      return;
+    }
+    compareGameRows.value = gamesResult.data ?? [];
+  } catch (err) {
+    compareError.value = err instanceof Error ? err.message : 'Unable to load comparison.';
+  } finally {
+    if (loadId === compareLoadCounter) {
+      compareLoading.value = false;
+    }
+  }
+};
+
+const openCompareDialog = () => {
+  compareDateFilter.value = 'all';
+  compareMatchMode.value = matchMode.value;
+  const leftDefault = profileId.value ?? '';
+  compareLeftPlayerId.value = leftDefault;
+  compareRightPlayerId.value =
+    targetPlayerId.value && targetPlayerId.value !== leftDefault ? targetPlayerId.value : '';
+  compareError.value = null;
+  compareOpen.value = true;
+  compareDialogRef.value?.showModal();
+  void loadCompareData();
+};
+
+const closeCompareDialog = () => {
+  compareDialogRef.value?.close();
+};
+
+const handleCompareDialogClosed = () => {
+  compareOpen.value = false;
+  compareLoading.value = false;
+  compareError.value = null;
+  compareMatchRows.value = [];
+  compareGameRows.value = [];
+};
+
 onMounted(() => {
   if (!targetPlayerId.value) {
     router.replace('/leaderboard');
@@ -1447,6 +2163,35 @@ watch(matchMode, () => {
   }
   loadData();
 });
+
+watch(compareMatchMode, () => {
+  if (!compareOpen.value) {
+    return;
+  }
+  void loadCompareData();
+});
+
+watch(compareLeftPlayerId, () => {
+  lastCompareChange.value = 'left';
+});
+
+watch(compareRightPlayerId, () => {
+  lastCompareChange.value = 'right';
+});
+
+watch([compareLeftPlayerId, compareRightPlayerId], () => {
+  if (!compareLeftPlayerId.value || !compareRightPlayerId.value) {
+    return;
+  }
+  if (compareLeftPlayerId.value !== compareRightPlayerId.value) {
+    return;
+  }
+  if (lastCompareChange.value === 'left') {
+    compareRightPlayerId.value = '';
+    return;
+  }
+  compareLeftPlayerId.value = '';
+});
 </script>
 
 <template>
@@ -1457,9 +2202,14 @@ watch(matchMode, () => {
         <h2>{{ playerDisplayName }}</h2>
         <p v-if="playerUsername" class="profile-username">@{{ playerUsername }}</p>
       </div>
-      <router-link class="primary-btn profile-match-btn" :to="`/players/${targetPlayerId}/matches`">
-        Match History
-      </router-link>
+      <div class="profile-actions">
+        <button type="button" class="primary-btn profile-compare-btn" @click="openCompareDialog">
+          Compare
+        </button>
+        <router-link class="primary-btn profile-match-btn" :to="`/players/${targetPlayerId}/matches`">
+          Match History
+        </router-link>
+      </div>
     </header>
 
     <div class="profile-filters">
@@ -1857,6 +2607,106 @@ watch(matchMode, () => {
         </div>
       </section>
     </div>
+
+    <dialog ref="compareDialogRef" class="compare-dialog" @close="handleCompareDialogClosed">
+      <form method="dialog" class="compare-dialog__card" @submit.prevent>
+        <header class="compare-dialog__header">
+          <div>
+            <p class="eyebrow">Compare</p>
+            <h2>Player comparison</h2>
+          </div>
+          <button type="button" class="compare-dialog__close" @click="closeCompareDialog">X</button>
+        </header>
+
+        <div class="compare-dialog__controls">
+          <div class="mode-toggle auth-toggle" role="tablist" aria-label="Match type">
+            <button
+              type="button"
+              class="auth-toggle__btn"
+              :class="{ 'is-active': compareMatchMode === 'doubles' }"
+              role="tab"
+              :aria-selected="compareMatchMode === 'doubles'"
+              @click="compareMatchMode = 'doubles'"
+            >
+              Doubles
+            </button>
+            <button
+              type="button"
+              class="auth-toggle__btn"
+              :class="{ 'is-active': compareMatchMode === 'singles' }"
+              role="tab"
+              :aria-selected="compareMatchMode === 'singles'"
+              @click="compareMatchMode = 'singles'"
+            >
+              Singles
+            </button>
+          </div>
+          <label class="field">
+            <span>Stats range</span>
+            <select v-model="compareDateFilter">
+              <option value="all">All time</option>
+              <option value="30">Last 30 days</option>
+              <option value="60">Last 60 days</option>
+              <option value="90">Last 90 days</option>
+            </select>
+          </label>
+        </div>
+
+        <div class="compare-dialog__selectors">
+          <label class="field">
+            <span>Left player</span>
+            <select v-model="compareLeftPlayerId">
+              <option value="">Select player</option>
+              <option v-for="player in compareLeftOptions" :key="player.id" :value="player.id">
+                {{ formatPlayerLabel(player) }}
+              </option>
+            </select>
+          </label>
+          <label class="field">
+            <span>Right player</span>
+            <select v-model="compareRightPlayerId">
+              <option value="">Select player</option>
+              <option v-for="player in compareRightOptions" :key="player.id" :value="player.id">
+                {{ formatPlayerLabel(player) }}
+              </option>
+            </select>
+          </label>
+        </div>
+
+        <p v-if="!compareReady && !compareLoading" class="compare-dialog__hint">
+          Select two players to compare.
+        </p>
+
+        <div v-if="compareLoading" class="form-message">Loading comparison...</div>
+        <div v-else-if="compareError" class="form-message is-error">{{ compareError }}</div>
+
+        <div v-else class="compare-dialog__body">
+          <section v-for="section in compareSections" :key="section.id" class="compare-section">
+            <header class="compare-section__header">
+              <h3>{{ section.label }}</h3>
+            </header>
+            <div class="compare-grid">
+              <div class="compare-grid__row compare-grid__header">
+                <span class="compare-grid__value compare-grid__value--left">{{ compareLeftLabel }}</span>
+                <span class="compare-grid__label">Stat</span>
+                <span class="compare-grid__value compare-grid__value--right">
+                  {{ compareRightLabel }}
+                </span>
+              </div>
+              <div v-for="row in section.rows" :key="row.id" class="compare-grid__row">
+                <span class="compare-grid__value compare-grid__value--left" :class="row.leftClass">
+                  {{ row.leftValue }}
+                </span>
+                <span class="compare-grid__label">{{ row.label }}</span>
+                <span class="compare-grid__value compare-grid__value--right" :class="row.rightClass">
+                  {{ row.rightValue }}
+                </span>
+              </div>
+            </div>
+          </section>
+        </div>
+      </form>
+    </dialog>
   </section>
 </template>
 
@@ -1896,9 +2746,156 @@ watch(matchMode, () => {
   justify-content: center;
 }
 
+.profile-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-sm);
+}
+
 .profile-body {
   display: grid;
   gap: var(--space-xl);
+}
+
+.compare-dialog {
+  width: min(960px, 96vw);
+  border: none;
+  padding: 0;
+  background: transparent;
+  margin: auto;
+}
+
+.compare-dialog::backdrop {
+  background: var(--overlay-backdrop);
+  backdrop-filter: blur(4px);
+}
+
+.compare-dialog__card {
+  background: var(--surface-card);
+  color: var(--text-primary);
+  border-radius: var(--radius-card);
+  border: 1px solid var(--brand-tint-08);
+  box-shadow: var(--shadow-card);
+  padding: var(--space-2xl);
+  display: grid;
+  gap: var(--space-md);
+  max-height: 90vh;
+  overflow-y: auto;
+}
+
+@supports (color: color-mix(in srgb, white, black)) {
+  .compare-dialog__card {
+    background: color-mix(in srgb, var(--surface-card) 92%, var(--surface-app) 8%);
+  }
+}
+
+.compare-dialog__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-sm);
+}
+
+.compare-dialog__close {
+  border: none;
+  background: transparent;
+  color: var(--text-muted);
+  font-size: 18px;
+  cursor: pointer;
+}
+
+.compare-dialog__controls {
+  display: grid;
+  gap: var(--space-sm);
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  align-items: end;
+}
+
+.compare-dialog__selectors {
+  display: grid;
+  gap: var(--space-sm);
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+}
+
+.compare-dialog__hint {
+  font-size: 13px;
+  color: var(--text-muted);
+}
+
+.compare-dialog__body {
+  display: grid;
+  gap: var(--space-lg);
+}
+
+.compare-section {
+  display: grid;
+  gap: var(--space-sm);
+}
+
+.compare-section__header h3 {
+  font-size: 14px;
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+  color: var(--text-muted);
+}
+
+.compare-grid {
+  display: grid;
+  gap: var(--space-xs);
+}
+
+.compare-grid__row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(120px, 160px) minmax(0, 1fr);
+  align-items: center;
+  gap: var(--space-sm);
+  padding: var(--space-xs) 0;
+  border-bottom: 1px solid var(--border-subtle);
+}
+
+.compare-grid__row:last-child {
+  border-bottom: none;
+}
+
+.compare-grid__header {
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  color: var(--text-muted);
+  border-bottom: 1px solid var(--border-subtle);
+  padding-bottom: var(--space-xs);
+}
+
+.compare-grid__label {
+  text-align: center;
+  font-size: 12px;
+  color: var(--text-muted);
+}
+
+.compare-grid__value {
+  font-weight: 600;
+  font-size: 14px;
+}
+
+.compare-grid__value--left {
+  text-align: left;
+}
+
+.compare-grid__value--right {
+  text-align: right;
+}
+
+.compare-grid__value.is-win {
+  color: var(--status-success);
+}
+
+.compare-grid__value.is-loss {
+  color: var(--status-danger);
+}
+
+.compare-grid__value.is-even {
+  color: var(--text-muted);
 }
 
 .profile-hero {
@@ -2262,6 +3259,34 @@ watch(matchMode, () => {
 
   .hero-stat__value {
     font-size: 22px;
+  }
+
+  .compare-dialog {
+    width: min(820px, 92vw);
+  }
+
+  .compare-dialog__header h2 {
+    font-size: 26px;
+  }
+
+  .compare-section__header h3 {
+    font-size: 17px;
+  }
+
+  .compare-grid__header {
+    font-size: 13px;
+  }
+
+  .compare-grid__label {
+    font-size: 14px;
+  }
+
+  .compare-grid__value {
+    font-size: 18px;
+  }
+
+  .compare-dialog__hint {
+    font-size: 15px;
   }
 }
 </style>
