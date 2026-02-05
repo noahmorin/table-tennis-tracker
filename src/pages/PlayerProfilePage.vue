@@ -743,7 +743,11 @@ const stats = computed(() => {
     return best;
   }, null);
 
-  const worstPartner = eligiblePartners.reduce<PartnerSummary | null>(
+  const worstPartnerPool = bestPartner
+    ? eligiblePartners.filter((partner) => partner.id !== bestPartner.id)
+    : eligiblePartners;
+
+  const worstPartner = worstPartnerPool.reduce<PartnerSummary | null>(
     (worst, current) => {
       if (!worst) {
         return current;
@@ -784,6 +788,9 @@ const stats = computed(() => {
     },
     null
   );
+
+  const validMostSuccessfulPartner =
+    mostSuccessfulPartner && mostSuccessfulPartner.avgPointDiff >= 0 ? mostSuccessfulPartner : null;
 
   const positivePartners = eligiblePartners.filter((partner) => partner.winPct > winPct);
   const negativePartners = eligiblePartners.filter((partner) => partner.winPct < winPct);
@@ -949,7 +956,7 @@ const stats = computed(() => {
     mostFrequentPartner,
     bestPartner,
     worstPartner,
-    mostSuccessfulPartner,
+      mostSuccessfulPartner: validMostSuccessfulPartner,
     positivePartners,
     negativePartners,
     recentMatches,
