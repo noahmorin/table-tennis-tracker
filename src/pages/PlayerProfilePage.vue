@@ -835,8 +835,12 @@ const stats = computed(() => {
       lastTenMatchEloChange = lastTen.reduce((sum, entry) => sum + entry.delta, 0);
 
       let gainMatch: MatchRow | null = null;
+      let gainMatchId: string | null = null;
+      let gainMatchDate: string | null = null;
       let gainDelta = Number.NEGATIVE_INFINITY;
       let lossMatch: MatchRow | null = null;
+      let lossMatchId: string | null = null;
+      let lossMatchDate: string | null = null;
       let lossDelta = Number.POSITIVE_INFINITY;
 
       ratedTargetMatches.forEach(({ match, delta }) => {
@@ -845,6 +849,8 @@ const stats = computed(() => {
           (gainMatch === null || delta > gainDelta || (delta === gainDelta && compareMatches(gainMatch, match) < 0))
         ) {
           gainMatch = match;
+          gainMatchId = match.id;
+          gainMatchDate = match.match_date;
           gainDelta = delta;
         }
 
@@ -853,16 +859,18 @@ const stats = computed(() => {
           (lossMatch === null || delta < lossDelta || (delta === lossDelta && compareMatches(lossMatch, match) < 0))
         ) {
           lossMatch = match;
+          lossMatchId = match.id;
+          lossMatchDate = match.match_date;
           lossDelta = delta;
         }
       });
 
-      if (gainMatch) {
-        biggestEloGain = { matchId: gainMatch.id, delta: gainDelta, matchDate: gainMatch.match_date };
+      if (gainMatchId && gainMatchDate) {
+        biggestEloGain = { matchId: gainMatchId, delta: gainDelta, matchDate: gainMatchDate };
       }
 
-      if (lossMatch) {
-        biggestEloLoss = { matchId: lossMatch.id, delta: lossDelta, matchDate: lossMatch.match_date };
+      if (lossMatchId && lossMatchDate) {
+        biggestEloLoss = { matchId: lossMatchId, delta: lossDelta, matchDate: lossMatchDate };
       }
     }
   }
