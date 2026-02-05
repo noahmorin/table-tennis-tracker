@@ -1,4 +1,4 @@
-import type { GameRow, MatchFormat, MatchRow } from './data/types';
+import type { GameRow, MatchFormat, MatchRow, MatchType } from './data/types';
 import { eloConfig } from '../config/eloConfig';
 
 export type MatchGameTotals = {
@@ -27,8 +27,10 @@ const compareMatches = (a: MatchRow, b: MatchRow) => {
   return a.id < b.id ? -1 : 1;
 };
 
-const resolveFormatWeight = (format: MatchFormat) => {
-  const weight = eloConfig.formatWeights[format];
+const resolveFormatWeight = (format: MatchFormat, matchType: MatchType) => {
+  const weightMap =
+    matchType === 'doubles' ? eloConfig.doublesFormatWeights : eloConfig.formatWeights;
+  const weight = weightMap[format];
   return Number.isFinite(weight) && weight > 0 ? weight : 1;
 };
 
@@ -136,7 +138,7 @@ export const calculateEloRatings = (
     const scoreB = totals.sideBWins / totals.totalGames;
     const expectedA = expectedScore(teamARating, teamBRating);
     const expectedB = 1 - expectedA;
-    const formatWeight = resolveFormatWeight(match.match_format);
+    const formatWeight = resolveFormatWeight(match.match_format, match.match_type);
     const doublesMultiplier = match.match_type === 'doubles' ? eloConfig.doublesMultiplier : 1;
 
     const teamAK = resolveK() * formatWeight * doublesMultiplier;
@@ -240,7 +242,7 @@ export const calculateEloMatchStates = (
     const scoreB = totals.sideBWins / totals.totalGames;
     const expectedA = expectedScore(teamARating, teamBRating);
     const expectedB = 1 - expectedA;
-    const formatWeight = resolveFormatWeight(match.match_format);
+    const formatWeight = resolveFormatWeight(match.match_format, match.match_type);
     const doublesMultiplier = match.match_type === 'doubles' ? eloConfig.doublesMultiplier : 1;
 
     const teamAK = resolveK() * formatWeight * doublesMultiplier;
@@ -333,7 +335,7 @@ export const calculateEloDeltasForPlayer = (
     const scoreB = totals.sideBWins / totals.totalGames;
     const expectedA = expectedScore(teamARating, teamBRating);
     const expectedB = 1 - expectedA;
-    const formatWeight = resolveFormatWeight(match.match_format);
+    const formatWeight = resolveFormatWeight(match.match_format, match.match_type);
     const doublesMultiplier = match.match_type === 'doubles' ? eloConfig.doublesMultiplier : 1;
 
     const teamAK = resolveK() * formatWeight * doublesMultiplier;

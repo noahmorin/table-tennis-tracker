@@ -16,11 +16,19 @@ const formatWeights: Record<MatchFormat, number> = {
   bo7: readEnvNumber('VITE_ELO_WEIGHT_BO7', 2)
 };
 
+const doublesFormatWeights: Record<MatchFormat, number> = {
+  bo1: readEnvNumber('VITE_ELO_DOUBLES_WEIGHT_BO1', 1),
+  bo3: readEnvNumber('VITE_ELO_DOUBLES_WEIGHT_BO3', 1.25),
+  bo5: readEnvNumber('VITE_ELO_DOUBLES_WEIGHT_BO5', 1.5),
+  bo7: readEnvNumber('VITE_ELO_DOUBLES_WEIGHT_BO7', 2)
+};
+
 export const eloConfig = {
   baseline: readEnvNumber('VITE_ELO_BASELINE', 1000),
   floor: readEnvNumber('VITE_ELO_FLOOR', 400),
   scale: readEnvNumber('VITE_ELO_SCALE', 1000),
   kFactor: readEnvNumber('VITE_ELO_K', 40),
-  doublesMultiplier: readEnvNumber('VITE_ELO_DOUBLES_MULTIPLIER', 0.8),
-  formatWeights
+  doublesMultiplier: readEnvNumber('VITE_ELO_DOUBLES_MULTIPLIER', 1),
+  formatWeights,
+  doublesFormatWeights
 };

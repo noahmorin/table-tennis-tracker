@@ -1,2 +1,2 @@
 ## TODO
-- On Mobile, doubles matches elo/win pill are cut off. Reduce the width of the  team names. The same thing happens in singles games where the player name is too long. Make sure this is reduced for both options.
+-Figure out how to create comparison scores, similar to fantasy sports, where I can pick a profile to compare against each individual stats.
