@@ -1196,7 +1196,7 @@ onMounted(() => {
                 <span class="match-type-pill">{{ matchTypeBadge(match) }}</span>
                 {{ matchDateLabel(match.match_date) }}
               </p>
-              <h3 class="match-card__players">
+              <h3 class="match-card__players" :class="{ 'is-doubles': match.match_type === 'doubles' }">
                 <span class="match-card__team">
                   <template
                     v-for="(player, index) in matchTeamParts(match, 'A')"
@@ -1214,6 +1214,7 @@ onMounted(() => {
                   </template>
                 </span>
                 <span class="match-card__vs">vs</span>
+                <br v-if="match.match_type === 'doubles'" />
                 <span class="match-card__team">
                   <template
                     v-for="(player, index) in matchTeamParts(match, 'B')"
@@ -1613,7 +1614,6 @@ onMounted(() => {
 .match-card__header {
   display: flex;
   justify-content: space-between;
-  gap: var(--space-md);
   align-items: flex-start;
 }
 
@@ -1622,7 +1622,7 @@ onMounted(() => {
   gap: var(--space-2xs);
   flex: 1 1 auto;
   min-width: 0;
-  max-width: calc(100% - 180px);
+  max-width: calc(100% - 120px);
 }
 
 .match-card__date {
@@ -1653,6 +1653,10 @@ onMounted(() => {
   margin-top: var(--space-2xs);
 }
 
+.match-card__players.is-doubles {
+  font-size: 14px;
+}
+
 .match-card__team {
   display: inline;
 }
@@ -1675,7 +1679,7 @@ onMounted(() => {
   flex-direction: column;
   gap: 4px;
   align-items: flex-end;
-  flex: 0 0 180px;
+  flex: 0 0 120px;
 }
 
 .match-card__pills {
