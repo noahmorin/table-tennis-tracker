@@ -672,7 +672,11 @@ const stats = computed(() => {
     return best;
   }, null);
 
-  const worstOpponent = matchupOpponents.reduce<OpponentSummary | null>((worst, current) => {
+  const worstOpponentPool = bestOpponent
+    ? matchupOpponents.filter((summary) => summary.id !== bestOpponent.id)
+    : matchupOpponents;
+
+  const worstOpponent = worstOpponentPool.reduce<OpponentSummary | null>((worst, current) => {
     if (!worst) {
       return current;
     }
