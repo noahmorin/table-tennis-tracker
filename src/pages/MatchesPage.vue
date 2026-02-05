@@ -1191,7 +1191,7 @@ onMounted(() => {
           :class="{ 'is-deleted': !match.is_active }"
         >
           <div class="match-card__header">
-            <div>
+            <div class="match-card__info">
               <p class="match-card__date">
                 <span class="match-type-pill">{{ matchTypeBadge(match) }}</span>
                 {{ matchDateLabel(match.match_date) }}
@@ -1231,7 +1231,10 @@ onMounted(() => {
                   </template>
                 </span>
               </h3>
-              <p class="match-card__detail">{{ matchFormatLabel(match.match_format) }}</p>
+              <div class="match-card__actions">
+                <span v-if="!match.is_active" class="match-card__status">Deleted</span>
+                <button class="ghost-btn" type="button" @click="openMatchDialog(match)">View / Edit</button>
+              </div>
             </div>
             <div class="match-card__score">
               <div class="match-card__pills">
@@ -1253,10 +1256,6 @@ onMounted(() => {
               <span class="match-card__result">{{ matchScoreLabel(match) }}</span>
               <span class="match-card__format">{{ matchFormatLabel(match.match_format) }}</span>
             </div>
-          </div>
-          <div class="match-card__actions">
-            <span v-if="!match.is_active" class="match-card__status">Deleted</span>
-            <button class="ghost-btn" type="button" @click="openMatchDialog(match)">View / Edit</button>
           </div>
         </article>
       </section>
@@ -1615,6 +1614,15 @@ onMounted(() => {
   display: flex;
   justify-content: space-between;
   gap: var(--space-md);
+  align-items: flex-start;
+}
+
+.match-card__info {
+  display: grid;
+  gap: var(--space-2xs);
+  flex: 1 1 auto;
+  min-width: 0;
+  max-width: calc(100% - 180px);
 }
 
 .match-card__date {
@@ -1667,13 +1675,14 @@ onMounted(() => {
   flex-direction: column;
   gap: 4px;
   align-items: flex-end;
+  flex: 0 0 180px;
 }
 
 .match-card__pills {
   display: flex;
-  flex-wrap: wrap;
+  flex-wrap: nowrap;
   gap: 6px;
-  justify-content: space-between;
+  justify-content: flex-end;
   align-items: center;
   width: 100%;
 }
@@ -1744,8 +1753,7 @@ onMounted(() => {
 .match-card__actions {
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  gap: var(--space-sm);
+  gap: var(--space-xs);
 }
 
 .match-card__status {
