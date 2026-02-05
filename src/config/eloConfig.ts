@@ -17,8 +17,8 @@ const formatWeights: Record<MatchFormat, number> = {
 };
 
 const doublesFormatWeights: Record<MatchFormat, number> = {
-  bo1: readEnvNumber('VITE_ELO_DOUBLES_WEIGHT_BO1', 1),
-  bo3: readEnvNumber('VITE_ELO_DOUBLES_WEIGHT_BO3', 1.25),
+  bo1: readEnvNumber('VITE_ELO_DOUBLES_WEIGHT_BO1', 0.75),
+  bo3: readEnvNumber('VITE_ELO_DOUBLES_WEIGHT_BO3', 1),
   bo5: readEnvNumber('VITE_ELO_DOUBLES_WEIGHT_BO5', 1.5),
   bo7: readEnvNumber('VITE_ELO_DOUBLES_WEIGHT_BO7', 2)
 };
