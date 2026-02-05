@@ -43,8 +43,19 @@ const formatPlayerLabel = (player: ProfileRow) => {
   return player.is_active ? base : `${base} (inactive)`;
 };
 
+const formatDateInput = (value: Date) => {
+  const year = value.getFullYear();
+  const month = String(value.getMonth() + 1).padStart(2, '0');
+  const day = String(value.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
+};
+
 const buildLeaderboardRows = (profiles: ProfileRow[], matches: MatchRow[], games: GameRow[]) => {
   const statsByPlayer = new Map<string, LeaderRow>();
+  const recentByPlayer = new Map<string, boolean>();
+  const cutoffDate = new Date();
+  cutoffDate.setDate(cutoffDate.getDate() - 30);
+  const cutoffLabel = formatDateInput(cutoffDate);
   const ensureRow = (playerId: string, name = 'Unknown player') => {
     const existing = statsByPlayer.get(playerId);
     if (existing) {
@@ -86,6 +97,11 @@ const buildLeaderboardRows = (profiles: ProfileRow[], matches: MatchRow[], games
       return;
     }
 
+    if (match.match_date >= cutoffLabel) {
+      teamA.forEach((playerId) => recentByPlayer.set(playerId, true));
+      teamB.forEach((playerId) => recentByPlayer.set(playerId, true));
+    }
+
     const sideAWin = totals.sideAWins > totals.sideBWins;
     const sideBWin = totals.sideBWins > totals.sideAWins;
 
@@ -115,15 +131,17 @@ const buildLeaderboardRows = (profiles: ProfileRow[], matches: MatchRow[], games
     Array.from(statsByPlayer.keys())
   );
 
-  const list = Array.from(statsByPlayer.values()).map((row) => ({
-    ...row,
-    elo:
-      row.matchesPlayed >= 3
-        ? (eloByPlayer.get(row.id) ?? null)
-        : null,
-    gamesDiff: row.gamesWon - row.gamesLost,
-    winPct: row.matchesPlayed > 0 ? row.wins / row.matchesPlayed : 0
-  }));
+  const list = Array.from(statsByPlayer.values())
+    .map((row) => ({
+      ...row,
+      elo:
+        row.matchesPlayed >= 3
+          ? (eloByPlayer.get(row.id) ?? null)
+          : null,
+      gamesDiff: row.gamesWon - row.gamesLost,
+      winPct: row.matchesPlayed > 0 ? row.wins / row.matchesPlayed : 0
+    }))
+    .filter((row) => recentByPlayer.get(row.id));
 
   list.sort((a, b) => {
     const eloA = a.elo ?? Number.NEGATIVE_INFINITY;

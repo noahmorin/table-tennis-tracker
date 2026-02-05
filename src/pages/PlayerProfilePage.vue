@@ -17,6 +17,7 @@ type TabId = 'overview' | 'matches' | 'elo' | 'streaks' | 'points';
 type DateFilterOption = 'all' | '30' | '60' | '90';
 const MIN_MATCHES_FOR_ELO_DISPLAY = 3;
 const MIN_MATCHES_FOR_MATCHUP = 3;
+const MIN_GAMES_FOR_PARTNER = 3;
 const gamesByFormat: Record<MatchRow['match_format'], number> = {
   bo1: 1,
   bo3: 3,
@@ -50,6 +51,7 @@ type OpponentSummary = {
 type PartnerSummary = {
   id: string;
   name: string;
+  gamesPlayed: number;
   matches: number;
   wins: number;
   losses: number;
@@ -422,6 +424,7 @@ const stats = computed(() => {
     string,
     {
       id: string;
+      gamesPlayed: number;
       matches: number;
       wins: number;
       losses: number;
@@ -570,11 +573,13 @@ const stats = computed(() => {
           const partner =
             partnerMap.get(partnerId) ?? {
               id: partnerId,
+              gamesPlayed: 0,
               matches: 0,
               wins: 0,
               losses: 0,
               pointDiffTotal: 0
             };
+          partner.gamesPlayed += totals.totalGames;
           partner.matches += 1;
           if (outcome === 'W') {
             partner.wins += 1;
@@ -690,6 +695,7 @@ const stats = computed(() => {
   const partnerSummaries: PartnerSummary[] = Array.from(partnerMap.values()).map((record) => ({
     id: record.id,
     name: resolveOpponentName(record.id),
+    gamesPlayed: record.gamesPlayed,
     matches: record.matches,
     wins: record.wins,
     losses: record.losses,
@@ -697,7 +703,11 @@ const stats = computed(() => {
     avgPointDiff: record.matches ? record.pointDiffTotal / record.matches : 0
   }));
 
-  const mostFrequentPartner = partnerSummaries.reduce<PartnerSummary | null>(
+  const eligiblePartners = partnerSummaries.filter(
+    (partner) => partner.gamesPlayed >= MIN_GAMES_FOR_PARTNER
+  );
+
+  const mostFrequentPartner = eligiblePartners.reduce<PartnerSummary | null>(
     (best, current) => {
       if (!best) {
         return current;
@@ -713,7 +723,7 @@ const stats = computed(() => {
     null
   );
 
-  const bestPartner = partnerSummaries.reduce<PartnerSummary | null>((best, current) => {
+  const bestPartner = eligiblePartners.reduce<PartnerSummary | null>((best, current) => {
     if (!best) {
       return current;
     }
@@ -729,7 +739,7 @@ const stats = computed(() => {
     return best;
   }, null);
 
-  const worstPartner = partnerSummaries.reduce<PartnerSummary | null>(
+  const worstPartner = eligiblePartners.reduce<PartnerSummary | null>(
     (worst, current) => {
       if (!worst) {
         return current;
@@ -748,7 +758,7 @@ const stats = computed(() => {
     null
   );
 
-  const mostSuccessfulPartner = partnerSummaries.reduce<PartnerSummary | null>(
+  const mostSuccessfulPartner = eligiblePartners.reduce<PartnerSummary | null>(
     (best, current) => {
       if (!best) {
         return current;
@@ -771,8 +781,8 @@ const stats = computed(() => {
     null
   );
 
-  const positivePartners = partnerSummaries.filter((partner) => partner.winPct > winPct);
-  const negativePartners = partnerSummaries.filter((partner) => partner.winPct < winPct);
+  const positivePartners = eligiblePartners.filter((partner) => partner.winPct > winPct);
+  const negativePartners = eligiblePartners.filter((partner) => partner.winPct < winPct);
 
   const hasElo = matchesPlayed >= MIN_MATCHES_FOR_ELO_DISPLAY;
   const deltas = hasElo
