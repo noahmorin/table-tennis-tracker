@@ -114,6 +114,22 @@
   --app-gradient-outer: #151d19;
 }
 
+@supports (color: color-mix(in srgb, white, black)) {
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme]) {
+      --app-gradient-inner: color-mix(in srgb, var(--surface-white) 96%, var(--brand-primary) 4%);
+      --app-gradient-mid: color-mix(in srgb, var(--surface-app) 92%, var(--brand-primary) 8%);
+      --app-gradient-outer: color-mix(in srgb, var(--surface-app-accent) 88%, var(--brand-primary) 12%);
+    }
+  }
+
+  :root[data-theme='dark'] {
+    --app-gradient-inner: color-mix(in srgb, var(--surface-white) 96%, var(--brand-primary) 4%);
+    --app-gradient-mid: color-mix(in srgb, var(--surface-app) 92%, var(--brand-primary) 8%);
+    --app-gradient-outer: color-mix(in srgb, var(--surface-app-accent) 88%, var(--brand-primary) 12%);
+  }
+}
+
 :root[data-theme-color='red'] {
   --brand-primary: #c0392b;
   --brand-primary-strong: #992d22;
