@@ -1,6 +1,6 @@
 ﻿<script setup lang="ts">
 import { computed, onMounted, ref, watch } from 'vue';
-import { useRoute, useRouter } from 'vue-router';
+import { useRoute, useRouter, type RouteLocationRaw } from 'vue-router';
 import { getProfileById, listProfiles } from '../lib/data/profiles';
 import { listMatches } from '../lib/data/matches';
 import { listGamesByMatchIds } from '../lib/data/games';
@@ -16,6 +16,7 @@ import { useMatchMode } from '../stores/matchMode';
 type TabId = 'overview' | 'matches' | 'elo' | 'streaks' | 'points';
 type DateFilterOption = 'all' | '30' | '60' | '90';
 const MIN_MATCHES_FOR_ELO_DISPLAY = 3;
+const MIN_MATCHES_FOR_MATCHUP = 3;
 const gamesByFormat: Record<MatchRow['match_format'], number> = {
   bo1: 1,
   bo3: 3,
@@ -70,10 +71,17 @@ type RecentOutcome = {
   date: string;
 };
 
+type EloDeltaHighlight = {
+  matchId: string;
+  delta: number;
+  matchDate: string;
+};
+
 type StatTile = {
   label: string;
   value: string;
   meta?: string;
+  to?: RouteLocationRaw;
 };
 
 const route = useRoute();
@@ -99,6 +107,11 @@ const matches = ref<MatchRow[]>([]);
 const games = ref<GameRow[]>([]);
 
 const targetPlayerId = computed(() => (typeof route.params.id === 'string' ? route.params.id : ''));
+
+const matchDetailsLink = (matchId: string): RouteLocationRaw => ({
+  path: `/players/${targetPlayerId.value}/matches`,
+  query: { matchId }
+});
 
 const playerMap = computed(() => {
   const map = new Map<string, ProfileRow>();
@@ -602,7 +615,9 @@ const stats = computed(() => {
     winPct: record.matches ? record.wins / record.matches : 0
   }));
 
-  const bestOpponent = opponentSummaries.reduce<OpponentSummary | null>((best, current) => {
+  const matchupOpponents = opponentSummaries.filter((summary) => summary.matches >= MIN_MATCHES_FOR_MATCHUP);
+
+  const bestOpponent = matchupOpponents.reduce<OpponentSummary | null>((best, current) => {
     if (!best) {
       return current;
     }
@@ -622,7 +637,7 @@ const stats = computed(() => {
     return best;
   }, null);
 
-  const worstOpponent = opponentSummaries.reduce<OpponentSummary | null>((worst, current) => {
+  const worstOpponent = matchupOpponents.reduce<OpponentSummary | null>((worst, current) => {
     if (!worst) {
       return current;
     }
@@ -760,6 +775,8 @@ const stats = computed(() => {
   let lastTenMatchEloChange = Number.NaN;
   let avgEloChange = Number.NaN;
   let totalMatchesRated = Number.NaN;
+  let biggestEloGain: EloDeltaHighlight | null = null;
+  let biggestEloLoss: EloDeltaHighlight | null = null;
 
   if (hasElo) {
     const ratedTargetMatches = orderedTargetMatches
@@ -772,6 +789,37 @@ const stats = computed(() => {
       lastMatchEloChange = ratedTargetMatches[ratedTargetMatches.length - 1].delta;
       const lastTen = ratedTargetMatches.slice(-10);
       lastTenMatchEloChange = lastTen.reduce((sum, entry) => sum + entry.delta, 0);
+
+      let gainMatch: MatchRow | null = null;
+      let gainDelta = Number.NEGATIVE_INFINITY;
+      let lossMatch: MatchRow | null = null;
+      let lossDelta = Number.POSITIVE_INFINITY;
+
+      ratedTargetMatches.forEach(({ match, delta }) => {
+        if (
+          delta > 0 &&
+          (gainMatch === null || delta > gainDelta || (delta === gainDelta && compareMatches(gainMatch, match) < 0))
+        ) {
+          gainMatch = match;
+          gainDelta = delta;
+        }
+
+        if (
+          delta < 0 &&
+          (lossMatch === null || delta < lossDelta || (delta === lossDelta && compareMatches(lossMatch, match) < 0))
+        ) {
+          lossMatch = match;
+          lossDelta = delta;
+        }
+      });
+
+      if (gainMatch) {
+        biggestEloGain = { matchId: gainMatch.id, delta: gainDelta, matchDate: gainMatch.match_date };
+      }
+
+      if (lossMatch) {
+        biggestEloLoss = { matchId: lossMatch.id, delta: lossDelta, matchDate: lossMatch.match_date };
+      }
     }
   }
 
@@ -867,6 +915,8 @@ const stats = computed(() => {
     lastTenMatchEloChange,
     avgEloChange,
     totalMatchesRated,
+    biggestEloGain,
+    biggestEloLoss,
     lastMatchDate
   };
 });
@@ -969,12 +1019,12 @@ const overviewTiles = computed<StatTile[]>(() => {
       value: formatPct(decidingWinRate, stats.value.decidingMatches)
     },
     {
-      label: 'Best opponent',
+      label: 'Best matchup',
       value: best ? best.label : '-',
       meta: opponentMetaLabel(best)
     },
     {
-      label: 'Worst opponent',
+      label: 'Worst matchup',
       value: worst ? worst.label : '-',
       meta: opponentMetaLabel(worst)
     },
@@ -1068,36 +1118,53 @@ const matchesSummaryTiles = computed<StatTile[]>(() => {
   ];
 });
 
-const eloTiles = computed<StatTile[]>(() => [
-  {
-    label: 'Current Elo',
-    value: formatNumber(Math.round(stats.value.currentElo))
-  },
-  {
-    label: 'Peak Elo',
-    value: formatNumber(Math.round(stats.value.highestElo))
-  },
-  {
-    label: 'Lowest Elo',
-    value: formatNumber(Math.round(stats.value.lowestElo))
-  },
-  {
-    label: 'Elo change (last match)',
-    value: formatSigned(stats.value.lastMatchEloChange, 1)
-  },
-  {
-    label: 'Elo change (last 10)',
-    value: formatSigned(stats.value.lastTenMatchEloChange, 1)
-  },
-  {
-    label: 'Avg Elo change / match',
-    value: formatSigned(stats.value.avgEloChange, 1)
-  },
-  {
-    label: 'Matches rated',
-    value: formatNumber(stats.value.totalMatchesRated)
-  }
-]);
+const eloTiles = computed<StatTile[]>(() => {
+  const biggestGain = stats.value.biggestEloGain;
+  const biggestLoss = stats.value.biggestEloLoss;
+
+  return [
+    {
+      label: 'Current Elo',
+      value: formatNumber(Math.round(stats.value.currentElo))
+    },
+    {
+      label: 'Peak Elo',
+      value: formatNumber(Math.round(stats.value.highestElo))
+    },
+    {
+      label: 'Lowest Elo',
+      value: formatNumber(Math.round(stats.value.lowestElo))
+    },
+    {
+      label: 'Elo change (last match)',
+      value: formatSigned(stats.value.lastMatchEloChange, 1)
+    },
+    {
+      label: 'Elo change (last 10)',
+      value: formatSigned(stats.value.lastTenMatchEloChange, 1)
+    },
+    {
+      label: 'Avg Elo change / match',
+      value: formatSigned(stats.value.avgEloChange, 1)
+    },
+    {
+      label: 'Matches rated',
+      value: formatNumber(stats.value.totalMatchesRated)
+    },
+    {
+      label: 'Biggest Elo gain',
+      value: biggestGain ? formatSigned(Math.round(biggestGain.delta)) : '-',
+      meta: biggestGain ? formatDate(biggestGain.matchDate) : undefined,
+      to: biggestGain ? matchDetailsLink(biggestGain.matchId) : undefined
+    },
+    {
+      label: 'Biggest Elo loss',
+      value: biggestLoss ? formatSigned(Math.round(biggestLoss.delta)) : '-',
+      meta: biggestLoss ? formatDate(biggestLoss.matchDate) : undefined,
+      to: biggestLoss ? matchDetailsLink(biggestLoss.matchId) : undefined
+    }
+  ];
+});
 
 const streakTiles = computed<StatTile[]>(() => [
   {
@@ -1415,20 +1482,34 @@ watch(matchMode, () => {
 
       <section v-if="activeTab === 'overview'" class="tab-panel">
         <div class="stat-grid">
-          <article v-for="tile in overviewTiles" :key="tile.label" class="stat-tile">
+          <component
+            :is="tile.to ? 'router-link' : 'article'"
+            v-for="tile in overviewTiles"
+            :key="tile.label"
+            class="stat-tile"
+            :class="{ 'stat-tile--link': Boolean(tile.to) }"
+            v-bind="tile.to ? { to: tile.to } : {}"
+          >
             <p class="stat-tile__label">{{ tile.label }}</p>
             <p class="stat-tile__value">{{ tile.value }}</p>
             <p v-if="tile.meta" class="stat-tile__meta">{{ tile.meta }}</p>
-          </article>
+          </component>
         </div>
       </section>
 
       <section v-else-if="activeTab === 'matches'" class="tab-panel">
         <div class="stat-grid stat-grid--compact">
-          <article v-for="tile in matchesSummaryTiles" :key="tile.label" class="stat-tile">
+          <component
+            :is="tile.to ? 'router-link' : 'article'"
+            v-for="tile in matchesSummaryTiles"
+            :key="tile.label"
+            class="stat-tile"
+            :class="{ 'stat-tile--link': Boolean(tile.to) }"
+            v-bind="tile.to ? { to: tile.to } : {}"
+          >
             <p class="stat-tile__label">{{ tile.label }}</p>
             <p class="stat-tile__value">{{ tile.value }}</p>
-          </article>
+          </component>
         </div>
 
         <article class="card">
@@ -1440,7 +1521,12 @@ watch(matchMode, () => {
           <div v-if="!stats.recentMatches.length" class="form-message">No matches recorded yet.</div>
 
           <div v-else class="recent-list">
-            <div v-for="match in stats.recentMatches" :key="match.id" class="recent-item">
+            <router-link
+              v-for="match in stats.recentMatches"
+              :key="match.id"
+              class="recent-item recent-item--link"
+              :to="matchDetailsLink(match.id)"
+            >
               <div>
                 <p class="recent-date">{{ match.date }}</p>
                 <p class="recent-opponent">vs {{ match.opponentName }}</p>
@@ -1460,7 +1546,7 @@ watch(matchMode, () => {
                   </span>
                 </div>
               </div>
-            </div>
+            </router-link>
           </div>
         </article>
       </section>
@@ -1530,19 +1616,35 @@ watch(matchMode, () => {
         </article>
 
         <div class="stat-grid stat-grid--compact">
-          <article v-for="tile in eloTiles" :key="tile.label" class="stat-tile">
+          <component
+            :is="tile.to ? 'router-link' : 'article'"
+            v-for="tile in eloTiles"
+            :key="tile.label"
+            class="stat-tile"
+            :class="{ 'stat-tile--link': Boolean(tile.to) }"
+            v-bind="tile.to ? { to: tile.to } : {}"
+          >
             <p class="stat-tile__label">{{ tile.label }}</p>
             <p class="stat-tile__value">{{ tile.value }}</p>
-          </article>
+            <p v-if="tile.meta" class="stat-tile__meta">{{ tile.meta }}</p>
+          </component>
         </div>
       </section>
 
       <section v-else-if="activeTab === 'streaks'" class="tab-panel">
         <div class="stat-grid stat-grid--compact">
-          <article v-for="tile in streakTiles" :key="tile.label" class="stat-tile">
+          <component
+            :is="tile.to ? 'router-link' : 'article'"
+            v-for="tile in streakTiles"
+            :key="tile.label"
+            class="stat-tile"
+            :class="{ 'stat-tile--link': Boolean(tile.to) }"
+            v-bind="tile.to ? { to: tile.to } : {}"
+          >
             <p class="stat-tile__label">{{ tile.label }}</p>
             <p class="stat-tile__value">{{ tile.value }}</p>
-          </article>
+            <p v-if="tile.meta" class="stat-tile__meta">{{ tile.meta }}</p>
+          </component>
         </div>
 
         <article class="card">
@@ -1569,10 +1671,18 @@ watch(matchMode, () => {
 
       <section v-else-if="activeTab === 'points'" class="tab-panel">
         <div class="stat-grid">
-          <article v-for="tile in pointsTiles" :key="tile.label" class="stat-tile">
+          <component
+            :is="tile.to ? 'router-link' : 'article'"
+            v-for="tile in pointsTiles"
+            :key="tile.label"
+            class="stat-tile"
+            :class="{ 'stat-tile--link': Boolean(tile.to) }"
+            v-bind="tile.to ? { to: tile.to } : {}"
+          >
             <p class="stat-tile__label">{{ tile.label }}</p>
             <p class="stat-tile__value">{{ tile.value }}</p>
-          </article>
+            <p v-if="tile.meta" class="stat-tile__meta">{{ tile.meta }}</p>
+          </component>
         </div>
       </section>
     </div>
@@ -1710,6 +1820,21 @@ watch(matchMode, () => {
   gap: 4px;
 }
 
+.stat-tile--link {
+  text-decoration: none;
+  color: inherit;
+  cursor: pointer;
+}
+
+.stat-tile--link:hover {
+  border-color: var(--brand-tint-16, var(--brand-tint-08));
+}
+
+.stat-tile--link:focus-visible {
+  outline: 2px solid var(--brand-primary);
+  outline-offset: 2px;
+}
+
 .stat-tile__label {
   font-size: 11px;
   text-transform: uppercase;
@@ -1749,6 +1874,17 @@ watch(matchMode, () => {
   gap: var(--space-sm);
   padding: var(--space-xs) 0;
   border-bottom: 1px solid var(--border-subtle);
+}
+
+.recent-item--link {
+  text-decoration: none;
+  color: inherit;
+  cursor: pointer;
+}
+
+.recent-item--link:focus-visible {
+  outline: 2px solid var(--brand-primary);
+  outline-offset: 2px;
 }
 
 .recent-item:last-child {

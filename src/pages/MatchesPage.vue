@@ -3,7 +3,7 @@ import { computed, onMounted, ref, watch } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import { AgGridVue } from 'ag-grid-vue3';
 import type { ColDef, GridApi, GridOptions } from 'ag-grid-community';
-import { listMatches, updateMatch, voidMatch } from '../lib/data/matches';
+import { getMatchById, listMatches, updateMatch, voidMatch } from '../lib/data/matches';
 import { listGamesByMatchId, listGamesByMatchIds } from '../lib/data/games';
 import { listProfiles } from '../lib/data/profiles';
 import type { GameInput, MatchFormat, MatchRow, MatchType, ProfileRow } from '../lib/data/types';
@@ -120,6 +120,11 @@ const formatPlayerLabel = (player: ProfileRow) => {
 
 const targetPlayerId = computed(() => {
   const raw = route.params.id;
+  return typeof raw === 'string' ? raw : '';
+});
+
+const matchIdFromQuery = computed(() => {
+  const raw = route.query.matchId;
   return typeof raw === 'string' ? raw : '';
 });
 
@@ -557,6 +562,22 @@ const loadEloDeltas = async () => {
   eloLoading.value = false;
 };
 
+const setMatchIdQuery = async (matchId: string) => {
+  if (!matchId || route.query.matchId === matchId) {
+    return;
+  }
+  await router.replace({ query: { ...route.query, matchId } });
+};
+
+const clearMatchIdQuery = async () => {
+  if (route.query.matchId === undefined) {
+    return;
+  }
+  const nextQuery: Record<string, unknown> = { ...route.query };
+  delete nextQuery.matchId;
+  await router.replace({ query: nextQuery });
+};
+
 const openMatchDialog = async (match: MatchRow) => {
   resetEditState();
   editMatch.value = match;
@@ -572,6 +593,7 @@ const openMatchDialog = async (match: MatchRow) => {
   editNotes.value = match.notes ?? '';
   syncEditRows(gamesByFormat[editMatchFormat.value]);
   dialogRef.value?.showModal();
+  void setMatchIdQuery(match.id);
 
   editLoading.value = true;
   const { data, error } = await listGamesByMatchId(match.id, { includeInactive: !match.is_active });
@@ -585,7 +607,11 @@ const openMatchDialog = async (match: MatchRow) => {
 
 const closeMatchDialog = () => {
   dialogRef.value?.close();
+};
+
+const handleMatchDialogClosed = () => {
   resetEditState();
+  void clearMatchIdQuery();
 };
 
 const openFilterDialog = () => {
@@ -977,6 +1003,47 @@ const defaultColDef: ColDef = {
   suppressSizeToFit: true
 };
 
+const openingMatchId = ref('');
+
+const openMatchFromQuery = async (matchId: string) => {
+  if (!matchId || !targetPlayerId.value) {
+    return;
+  }
+  if (editMatch.value?.id === matchId || openingMatchId.value === matchId) {
+    return;
+  }
+
+  const existing = matches.value.find((match) => match.id === matchId);
+  if (existing) {
+    openingMatchId.value = matchId;
+    try {
+      await openMatchDialog(existing);
+    } finally {
+      openingMatchId.value = '';
+    }
+    return;
+  }
+
+  openingMatchId.value = matchId;
+  try {
+    const { data, error } = await getMatchById(matchId);
+    if (error || !data) {
+      void clearMatchIdQuery();
+      return;
+    }
+    if (!isParticipant(data, targetPlayerId.value)) {
+      void clearMatchIdQuery();
+      return;
+    }
+    if (data.match_type && data.match_type !== matchMode.value) {
+      setMatchMode(data.match_type);
+    }
+    await openMatchDialog(data);
+  } finally {
+    openingMatchId.value = '';
+  }
+};
+
 watch(
   [includeInactive, dateFrom, dateTo, opponentId, sortOrder, filterWins, filterLosses, matchMode, profile, isAdmin],
   () => {
@@ -1005,6 +1072,20 @@ watch(isAdmin, (next) => {
     includeInactive.value = false;
   }
   loadProfiles();
+});
+
+watch(
+  matchIdFromQuery,
+  (matchId) => {
+    void openMatchFromQuery(matchId);
+  },
+  { immediate: true }
+);
+
+watch(matches, () => {
+  if (matchIdFromQuery.value) {
+    void openMatchFromQuery(matchIdFromQuery.value);
+  }
 });
 
 watch([editTeamAPlayer1Id, editTeamAPlayer2Id, editTeamBPlayer1Id, editTeamBPlayer2Id], () => {
@@ -1192,7 +1273,7 @@ onMounted(() => {
       </form>
     </dialog>
 
-    <dialog ref="dialogRef" class="match-dialog" @close="resetEditState">
+    <dialog ref="dialogRef" class="match-dialog" @close="handleMatchDialogClosed">
       <form method="dialog" class="match-dialog__card" @submit.prevent>
         <header class="match-dialog__header">
           <div>
