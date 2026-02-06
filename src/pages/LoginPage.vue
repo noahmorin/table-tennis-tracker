@@ -20,6 +20,9 @@ const mode = ref<AuthMode>('sign-in');
 const email = ref('');
 const password = ref('');
 const confirmPassword = ref('');
+const username = ref('');
+const firstName = ref('');
+const lastName = ref('');
 
 const infoMessage = ref<string | null>(null);
 const errorMessage = ref<string | null>(null);
@@ -50,9 +53,18 @@ watch(mode, () => {
   infoMessage.value = null;
   errorMessage.value = null;
   confirmPassword.value = '';
+  username.value = '';
+  firstName.value = '';
+  lastName.value = '';
 });
 
 const validateSignUp = () => {
+  if (!username.value.trim()) {
+    return 'Username is required.';
+  }
+  if (!firstName.value.trim() || !lastName.value.trim()) {
+    return 'First and last name are required.';
+  }
   if (!email.value || !password.value || !confirmPassword.value) {
     return 'Email and password are required.';
   }
@@ -100,7 +112,10 @@ const handleSignUp = async () => {
   try {
     const { needsEmailConfirmation } = await signUpWithEmail({
       email: email.value.trim(),
-      password: password.value
+      password: password.value,
+      username: username.value.trim(),
+      firstName: firstName.value.trim(),
+      lastName: lastName.value.trim()
     });
 
     infoMessage.value = needsEmailConfirmation
@@ -150,6 +165,21 @@ const handleSignOut = async () => {
           Create Account
         </button>
       </div>
+
+      <label v-if="mode === 'sign-up'" class="field">
+        <span>Username</span>
+        <input v-model="username" type="text" placeholder="your.handle" autocomplete="username" />
+      </label>
+
+      <label v-if="mode === 'sign-up'" class="field">
+        <span>First name</span>
+        <input v-model="firstName" type="text" placeholder="First name" autocomplete="given-name" />
+      </label>
+
+      <label v-if="mode === 'sign-up'" class="field">
+        <span>Last name</span>
+        <input v-model="lastName" type="text" placeholder="Last name" autocomplete="family-name" />
+      </label>
 
       <label class="field">
         <span>Email</span>

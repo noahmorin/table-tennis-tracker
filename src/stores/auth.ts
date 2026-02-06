@@ -16,6 +16,9 @@ export type Profile = {
 type SignUpInput = {
   email: string;
   password: string;
+  username: string;
+  firstName: string;
+  lastName: string;
 };
 
 const session = ref<Session | null>(null);
@@ -208,7 +211,12 @@ const signUpWithEmail = async (input: SignUpInput) => {
     email: input.email,
     password: input.password,
     options: {
-      emailRedirectTo: redirectTo
+      emailRedirectTo: redirectTo,
+      data: {
+        username: input.username,
+        first_name: input.firstName,
+        last_name: input.lastName
+      }
     }
   });
 
