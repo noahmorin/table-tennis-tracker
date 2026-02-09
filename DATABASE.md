@@ -1,7 +1,7 @@
 # Database Reference (Supabase Postgres)
 
-Last updated: 2026-02-03
-Source: post-migration schema (doubles refactor applied).
+Last updated: 2026-02-09
+Source: live schema introspection (public schema).
 See `AGENTS.md` for app-wide rules and guardrails.
 
 ## Overview
@@ -9,6 +9,7 @@ The database is designed for auditability and deterministic recomputation:
 - Matches and games are append-only via soft-deactivation (`is_active=false`).
 - RLS is enabled on all tables; writes go through SECURITY DEFINER RPCs.
 - Audit log is append-only and admin-readable only.
+- Bug report queue is used for onboarding/admin follow-up.
 
 ## Tables
 
@@ -39,7 +40,7 @@ Purpose: match header row, cached derived fields at the side/team level.
 Key columns:
 - `id uuid pk`
 - `match_type text not null default 'doubles'` CHECK in `('singles','doubles')`
-- `match_format text` CHECK in `('bo1','bo3','bo5','bo7')`
+- `match_format text not null` CHECK in `('bo1','bo3','bo5','bo7')`
 - `match_date date not null`
 - `competition_type text` CHECK in `('ranked','tournament')` default `ranked`
 - `competition_id uuid` (FK competitions)
@@ -124,6 +125,25 @@ RLS policies:
 - `competitions_select_authenticated`: SELECT for authenticated where `is_active=true` or admin
 - `competitions_admin_insert`, `competitions_admin_update`: admin-only
 
+### `bug_reports`
+Purpose: admin-visible queue for onboarding or data issues.
+
+Key columns:
+- `id uuid pk` (default `gen_random_uuid()`)
+- `title text not null`
+- `description text not null`
+- `is_active boolean default true`
+- audit columns (`created_at`, `created_by`, `updated_at`, `updated_by`)
+
+Constraints:
+- update pair checks (updated_at/updated_by)
+
+Indexes:
+- `idx_bug_reports_created_at` (`created_at` DESC)
+
+RLS policies:
+- `bug_reports_insert_own_profile`: INSERT where `created_by` matches current profile
+
 ### `audit_log`
 Purpose: append-only audit trail.
 
@@ -150,6 +170,7 @@ Purpose: nested teams read shape for matches.
 
 Behavior:
 - Returns `team_a` and `team_b` as JSON arrays (ordered by slot).
+- Includes match header fields (`match_type`, `match_format`, `match_date`, `competition_type`, `competition_id`, `notes`, side games won, winner/loser side, audit columns).
 - Filters to `is_active=true` or admin.
 - SECURITY INVOKER so RLS applies.
 
@@ -162,6 +183,12 @@ SECURITY DEFINER; used inside RPCs for authorization.
 ### `is_admin() -> boolean`
 Returns `profiles.is_admin` for the current auth user; defaults to false.
 SECURITY DEFINER; used inside RPCs and RLS policies.
+
+### `handle_new_user_profile() -> trigger`
+Auth trigger helper. Creates a `profiles` row for new auth users, validates username format, and writes an audit log entry.
+
+### `create_bug_report_on_user_create() -> trigger`
+Auth trigger helper. Creates a `bug_reports` entry if a new auth user has no linked profile yet, assigning it to the earliest admin.
 
 ### `match_create(...) -> void`
 Signature:
@@ -206,6 +233,7 @@ Validates username: non-null, non-empty, regex `^[a-z0-9._-]+$`, case-insensitiv
 | schema | table | policy | command | using_expression | with_check_expression |
 | --- | --- | --- | --- | --- | --- |
 | public | audit_log | audit_log_select_admin | SELECT | is_admin() | null |
+| public | bug_reports | bug_reports_insert_own_profile | INSERT | null | (EXISTS ( SELECT 1 FROM profiles WHERE ((profiles.id = bug_reports.created_by) AND (profiles.auth_user_id = auth.uid())))) |
 | public | competitions | competitions_admin_insert | INSERT | null | is_admin() |
 | public | competitions | competitions_admin_update | UPDATE | is_admin() | is_admin() |
 | public | competitions | competitions_select_authenticated | SELECT | ((is_active = true) OR is_admin()) | null |
@@ -217,10 +245,12 @@ Validates username: non-null, non-empty, regex `^[a-z0-9._-]+$`, case-insensitiv
 | public | profiles | profiles_select_authenticated | SELECT | true | null |
 
 ## Triggers (Relevant)
-Auth profiles:
-| schema | table | trigger_name | timing | definition |
-| --- | --- | --- | --- | --- |
-| auth | users | on_auth_user_created | AFTER INSERT | `handle_new_user_profile()` |
+Public schema:
+- None (no public triggers returned by introspection).
+
+Auth profiles (not in public schema; verify in auth schema when needed):
+- `handle_new_user_profile()` trigger helper
+- `create_bug_report_on_user_create()` trigger helper
 
 Non-app triggers (Supabase-managed):
 | schema | table | trigger_name | timing |
@@ -233,4 +263,3 @@ Non-app triggers (Supabase-managed):
 | storage | objects | update_objects_updated_at | BEFORE UPDATE |
 | storage | prefixes | prefixes_create_hierarchy | BEFORE INSERT |
 | storage | prefixes | prefixes_delete_hierarchy | AFTER DELETE |
-
